@@ -2,21 +2,21 @@ spring:
   application:
     name: packid-api
 
-  jpa:
-    hibernate:
-      ddl-auto: update          # depois em prod você pode trocar para 'validate'
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: false
+#  jpa:
+#    hibernate:
+#      ddl-auto: update          # depois em prod você pode trocar para 'validate'
+#    properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
+#    show-sql: false
 
   security:
     oauth2:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
+            client-id: ${GOOGLE_CLIENT_ID:1038956855582-butsolaui084jl49djo5keimjggts013.apps.googleusercontent.com}
+            client-secret: ${GOOGLE_CLIENT_SECRET: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}
             scope:
               - openid
               - profile
