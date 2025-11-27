@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: PackID API
+  datasource:
+    url: jdbc:postgresql://localhost:5432/packid_db
+    username: packid
+    password: !@sdf25ksjbd856flksb
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update  # depois em produção pode virar 'validate'
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+server:
+  port: 8080
