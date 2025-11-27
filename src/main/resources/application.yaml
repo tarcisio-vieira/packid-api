@@ -1,19 +1,34 @@
 spring:
   application:
-    name: PackID API
-  datasource:
-    url: jdbc:postgresql://localhost:5432/packid_db
-    username: packid
-    password: !@sdf25ksjbd856flksb
-    driver-class-name: org.postgresql.Driver
+    name: packid-api
 
-  jpa:
-    hibernate:
-      ddl-auto: update  # depois em produção pode virar 'validate'
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: false
+#  jpa:
+#    hibernate:
+#      ddl-auto: update          # depois em prod você pode trocar para 'validate'
+#    properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
+#    show-sql: false
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:1038956855582-butsolaui084jl49djo5keimjggts013.apps.googleusercontent.com}
+            client-secret: ${GOOGLE_CLIENT_SECRET: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}
+            scope:
+              - openid
+              - profile
+              - email
+        provider:
+          google:
+            issuer-uri: https://accounts.google.com
 
 server:
   port: 8080
+
+logging:
+  level:
+    root: INFO
+    org.springframework.security: INFO

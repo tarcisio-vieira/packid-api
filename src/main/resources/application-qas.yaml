@@ -1,0 +1,17 @@
+spring:
+#  datasource:
+#    url: ${DB_URL_QAS:jdbc:postgresql://localhost:5432/packid_qas}
+#    username: ${DB_USER_QAS:packid_qas}
+#    password: ${DB_PASS_QAS:packid_qas}
+#    driver-class-name: org.postgresql.Driver
+
+#  jpa:
+#    hibernate:
+#      ddl-auto: update   # update em qas para testes
+
+server:
+  port: 8081
+
+logging:
+  level:
+    root: INFO
