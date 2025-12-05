@@ -14,8 +14,7 @@ public class UserController {
     public Map<String, Object> me(@AuthenticationPrincipal OidcUser user) {
         return Map.of(
                 "name", user.getFullName(),
-                "email", user.getEmail(),
-                "claims", user.getClaims()
+                "email", user.getEmail()
         );
     }
 }
