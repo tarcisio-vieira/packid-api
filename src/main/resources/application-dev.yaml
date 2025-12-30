@@ -1,19 +1,20 @@
 spring:
-#  datasource:
-#    url: jdbc:postgresql://localhost:5432/packid_dev
-#    username: packid_dev
-#    password: packid_dev
-#    driver-class-name: org.postgresql.Driver
+  datasource:
+    url: jdbc:postgresql://localhost:5432/packid_dev
+    username: packid_dev
+    password: packid_dev
+    driver-class-name: org.postgresql.Driver
 
-#  jpa:
-#    hibernate:
-#      ddl-auto: update   # em dev é ok deixar update
-
-server:
-  port: 8080
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
 logging:
   level:
-#    root: DEBUG
+    root: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE

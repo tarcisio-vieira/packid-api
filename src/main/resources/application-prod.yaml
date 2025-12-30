@@ -1,16 +1,16 @@
 spring:
-#  datasource:
-#    url: ${DB_URL_PROD:jdbc:postgresql://localhost:5432/packid_db}
-#    username: ${DB_USER_PROD:packid}
-#    password: ${DB_PASS_PROD:Packid123!}
-#    driver-class-name: org.postgresql.Driver
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/packid}
+    username: ${DB_USER:packid_user}
+    password: ${DB_PASSWORD:!@JM12337050vsg@jkhg-mltjmj!#2080}
+    driver-class-name: org.postgresql.Driver
 
-#  jpa:
-#    hibernate:
-#      ddl-auto: validate   # em produção é validate
-
-server:
-  port: 8080
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
 
 logging:
   level:

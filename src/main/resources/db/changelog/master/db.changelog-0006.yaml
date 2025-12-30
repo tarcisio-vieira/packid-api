@@ -1,0 +1,100 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0006-create-apartment
+      author: packid
+      changes:
+        - createTable:
+            tableName: apartment
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: block_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: floor
+                  type: smallint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: apartment_number
+                  type: smallint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: apartment
+            baseColumnNames: block_id
+            referencedTableName: block
+            referencedColumnNames: id
+            constraintName: fk_apartment_block
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: apartment
+            columnNames: block_id,floor,apartment_number
+            constraintName: uq_apartment_block_floor_number
+
+        - addCheckConstraint:
+            tableName: apartment
+            constraintName: ck_apartment_floor_1_12
+            checkConstraint: "floor between 1 and 12"
+
+        - addCheckConstraint:
+            tableName: apartment
+            constraintName: ck_apartment_number_1_8
+            checkConstraint: "apartment_number between 1 and 8"
+
+        - createIndex:
+            tableName: apartment
+            indexName: idx_apartment_block_id
+            columns:
+              - column:
+                  name: block_id

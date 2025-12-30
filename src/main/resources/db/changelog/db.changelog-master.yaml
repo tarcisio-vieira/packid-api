@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/master/db.changelog-0001.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0002.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0003.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0004.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0005.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0006.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0007.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0008.yaml

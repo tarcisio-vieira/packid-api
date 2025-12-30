@@ -1,0 +1,120 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0005-create-block
+      author: packid
+      changes:
+        - createTable:
+            tableName: block
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: condominium_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: code
+                  type: varchar(10)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: varchar(120)
+                  constraints:
+                    nullable: true
+
+              - column:
+                  name: floors_count
+                  type: smallint
+                  defaultValueNumeric: 12
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: units_per_floor
+                  type: smallint
+                  defaultValueNumeric: 8
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: block
+            baseColumnNames: condominium_id
+            referencedTableName: Condominium.java
+            referencedColumnNames: id
+            constraintName: fk_block_condominium
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: block
+            columnNames: condominium_id,code
+            constraintName: uq_block_condominium_code
+
+        # restringe a 4 blocos por condomínio via códigos A/B/C/D
+        - addCheckConstraint:
+            tableName: block
+            constraintName: ck_block_code_abcd
+            checkConstraint: "code in ('A','B','C','D')"
+
+        - addCheckConstraint:
+            tableName: block
+            constraintName: ck_block_floors_12
+            checkConstraint: "floors_count = 12"
+
+        - addCheckConstraint:
+            tableName: block
+            constraintName: ck_block_units_per_floor_8
+            checkConstraint: "units_per_floor = 8"
+
+        - createIndex:
+            tableName: block
+            indexName: idx_block_condominium_id
+            columns:
+              - column:
+                  name: condominium_id

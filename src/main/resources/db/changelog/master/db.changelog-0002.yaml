@@ -1,0 +1,124 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0002-create-product
+      author: packid
+      changes:
+        - createTable:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: code
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: text
+                  constraints:
+                    nullable: true
+              - column:
+                  name: unit_price
+                  type: numeric(14,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: unit_of_measure_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: product
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_product_tenant
+            onDelete: RESTRICT
+
+        # garante que UOM pertence ao mesmo tenant do produto
+        - addForeignKeyConstraint:
+            baseTableName: product
+            baseColumnNames: tenant_id,unit_of_measure_id
+            referencedTableName: unit_of_measure
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_product_uom_same_tenant
+            onDelete: RESTRICT
+
+        # único por tenant
+        - addUniqueConstraint:
+            tableName: product
+            columnNames: tenant_id,code
+            constraintName: uq_product_tenant_code
+
+        - createIndex:
+            tableName: product
+            indexName: idx_product_tenant_id
+            columns:
+              - column:
+                  name: tenant_id
+
+        - createIndex:
+            tableName: product
+            indexName: idx_product_tenant_uom
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: unit_of_measure_id

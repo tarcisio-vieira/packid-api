@@ -1,0 +1,106 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-create-unit-of-measure
+      author: packid
+      changes:
+        - createTable:
+            tableName: unit_of_measure
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: code
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: text
+                  constraints:
+                    nullable: true
+              - column:
+                  name: symbol
+                  type: varchar(20)
+                  constraints:
+                    nullable: true
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: unit_of_measure
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_uom_tenant
+            onDelete: RESTRICT
+
+        # único por tenant
+        - addUniqueConstraint:
+            tableName: unit_of_measure
+            columnNames: tenant_id,code
+            constraintName: uq_uom_tenant_code
+
+        # necessário para FK composta (tenant_id, id)
+        - addUniqueConstraint:
+            tableName: unit_of_measure
+            columnNames: tenant_id,id
+            constraintName: uq_uom_tenant_id_id
+
+        - createIndex:
+            tableName: unit_of_measure
+            indexName: idx_uom_tenant_id
+            columns:
+              - column:
+                  name: tenant_id

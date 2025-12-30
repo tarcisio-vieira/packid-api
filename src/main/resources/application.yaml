@@ -1,15 +1,9 @@
+server:
+  port: 8080
+
 spring:
   application:
     name: packid-api
-
-#  jpa:
-#    hibernate:
-#      ddl-auto: update          # depois em prod você pode trocar para 'validate'
-#    properties:
-#      hibernate:
-#        dialect: org.hibernate.dialect.PostgreSQLDialect
-#    show-sql: false
-
   security:
     oauth2:
       client:
@@ -24,14 +18,19 @@ spring:
         provider:
           google:
             issuer-uri: https://accounts.google.com
+  app:
+    frontend-url: ${FRONTEND_URL}
 
-server:
-  port: 8080
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 logging:
   level:
     root: INFO
-    org.springframework.security: INFO
-
-app:
-  frontend-url: ${FRONTEND_URL}

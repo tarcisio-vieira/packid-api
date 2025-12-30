@@ -1,0 +1,110 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0004-create-Condominium.java
+      author: packid
+      changes:
+        - createTable:
+            tableName: Condominium.java
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: address_line1
+                  type: varchar(200)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: address_line2
+                  type: varchar(200)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: city
+                  type: varchar(120)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: state
+                  type: varchar(80)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: zip_code
+                  type: varchar(20)
+                  constraints:
+                    nullable: true
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: Condominium.java
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_condominium_tenant
+            onDelete: RESTRICT
+
+        - addUniqueConstraint:
+            tableName: Condominium.java
+            columnNames: tenant_id,name
+            constraintName: uq_condominium_tenant_name
+
+        - createIndex:
+            tableName: Condominium.java
+            indexName: idx_condominium_tenant_id
+            columns:
+              - column:
+                  name: tenant_id
