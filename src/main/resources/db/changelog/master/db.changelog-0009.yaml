@@ -44,6 +44,21 @@ databaseChangeLog:
                   type: varchar(20)
                   constraints:
                     nullable: false
+
+              # QRCode / Código de barras (pode ser grande)
+              - column:
+                  name: package_code
+                  type: text
+                  constraints:
+                    nullable: true
+
+              # Hash para busca/uniqueness eficiente
+              - column:
+                  name: package_code_hash
+                  type: char(64)
+                  constraints:
+                    nullable: true
+
               - column:
                   name: carrier
                   type: varchar(80)
@@ -60,7 +75,7 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
-              # Quando chegou na portaria
+              # Chegada na portaria
               - column:
                   name: arrived_at
                   type: timestamp
@@ -68,7 +83,7 @@ databaseChangeLog:
                   constraints:
                     nullable: false
 
-              # WhatsApp (integração/validações)
+              # WhatsApp (status)
               - column:
                   name: whatsapp_message_id
                   type: varchar(120)
@@ -90,14 +105,14 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
-              # Confirmação do morador ("recebi em mãos")
+              # Clique/confirmação do morador ("recebi em mãos")
               - column:
                   name: resident_acknowledged_at
                   type: timestamp
                   constraints:
                     nullable: true
 
-              # Entrega efetiva (se quiser separar do clique)
+              # Entrega efetiva (opcional separar do clique)
               - column:
                   name: handed_over_at
                   type: timestamp
@@ -109,13 +124,14 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
+              # Observações
               - column:
-                  name: notes
+                  name: observations
                   type: text
                   constraints:
                     nullable: true
 
-              # auditoria / soft delete (mesmo padrão)
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -222,3 +238,19 @@ databaseChangeLog:
                   name: tenant_id
               - column:
                   name: tracking_code
+
+        # Busca eficiente por QR/barcode (via hash)
+        - createIndex:
+            tableName: pack_id
+            indexName: idx_pack_id_tenant_package_code_hash
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: package_code_hash
+
+        # Opcional, mas recomendado: evita duplicar o mesmo código dentro do tenant
+        - addUniqueConstraint:
+            tableName: pack_id
+            columnNames: tenant_id,package_code_hash
+            constraintName: uq_pack_id_tenant_package_code_hash

@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -47,6 +49,15 @@ public class PackId extends AuditableEntity {
     @Column(name = "package_type", nullable = false, length = 20)
     private PackageType packageType;
 
+    // QRCode/código de barras (pode ser grande)
+    @Lob
+    @Column(name = "package_code", columnDefinition = "text")
+    private String packageCode;
+
+    // SHA-256 hex (64 chars)
+    @Column(name = "package_code_hash", length = 64)
+    private String packageCodeHash;
+
     @Column(name = "carrier", length = 80)
     private String carrier;
 
@@ -72,11 +83,11 @@ public class PackId extends AuditableEntity {
     @Column(name = "whatsapp_read_at")
     private LocalDateTime whatsappReadAt;
 
-    // Confirmação do morador (clique/aceite)
+    // Clique/confirmação do morador
     @Column(name = "resident_acknowledged_at")
     private LocalDateTime residentAcknowledgedAt;
 
-    // Entrega em mãos (opcional separar do clique)
+    // Entrega em mãos
     @Column(name = "handed_over_at")
     private LocalDateTime handedOverAt;
 
@@ -87,13 +98,31 @@ public class PackId extends AuditableEntity {
     @JoinColumn(name = "handed_over_by_user_id", insertable = false, updatable = false)
     private AppUser handedOverBy;
 
-    @Column(name = "notes", columnDefinition = "text")
-    private String notes;
+    // Observações
+    @Column(name = "observations", columnDefinition = "text")
+    private String observations;
 
-    /** Conveniência: bloco e apto vem de apartment->block */
+    @PrePersist
+    @PreUpdate
+    void computePackageCodeHash() {
+        this.packageCodeHash = sha256Hex(packageCode);
+    }
+
+    private static String sha256Hex(String input) {
+        if (input == null || input.isBlank()) return null;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao gerar SHA-256 do packageCode", e);
+        }
+    }
+
     @Transient
     public String getApartmentCode() {
-        if (apartment == null) return null;
-        return apartment.getApartmentCode(); // ex.: 2608 / 11102 / 41201
+        return apartment != null ? apartment.getApartmentCode() : null;
     }
 }
