@@ -1,10 +1,10 @@
 databaseChangeLog:
   - changeSet:
-      id: 0002-create-product
+      id: 0007-create-unit-of-measure
       author: packid
       changes:
         - createTable:
-            tableName: product
+            tableName: unit_of_measure
             columns:
               - column:
                   name: id
@@ -21,31 +21,29 @@ databaseChangeLog:
 
               - column:
                   name: code
-                  type: varchar(50)
+                  type: varchar(30)
                   constraints:
                     nullable: false
+
               - column:
                   name: name
-                  type: varchar(200)
+                  type: varchar(120)
                   constraints:
                     nullable: false
+
               - column:
                   name: description
                   type: text
                   constraints:
                     nullable: true
-              - column:
-                  name: unit_price
-                  type: numeric(14,2)
-                  constraints:
-                    nullable: false
 
               - column:
-                  name: unit_of_measure_id
-                  type: uuid
+                  name: symbol
+                  type: varchar(20)
                   constraints:
-                    nullable: false
+                    nullable: true
 
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -85,40 +83,20 @@ databaseChangeLog:
                     nullable: false
 
         - addForeignKeyConstraint:
-            baseTableName: product
+            baseTableName: unit_of_measure
             baseColumnNames: tenant_id
             referencedTableName: tenant
             referencedColumnNames: id
-            constraintName: fk_product_tenant
+            constraintName: fk_uom_tenant
             onDelete: RESTRICT
 
-        # garante que UOM pertence ao mesmo tenant do produto
-        - addForeignKeyConstraint:
-            baseTableName: product
-            baseColumnNames: tenant_id,unit_of_measure_id
-            referencedTableName: unit_of_measure
-            referencedColumnNames: tenant_id,id
-            constraintName: fk_product_uom_same_tenant
-            onDelete: RESTRICT
-
-        # único por tenant
         - addUniqueConstraint:
-            tableName: product
+            tableName: unit_of_measure
             columnNames: tenant_id,code
-            constraintName: uq_product_tenant_code
+            constraintName: uq_uom_tenant_code
 
-        - createIndex:
-            tableName: product
-            indexName: idx_product_tenant_id
-            columns:
-              - column:
-                  name: tenant_id
-
-        - createIndex:
-            tableName: product
-            indexName: idx_product_tenant_uom
-            columns:
-              - column:
-                  name: tenant_id
-              - column:
-                  name: unit_of_measure_id
+        # necessário para FKs compostas (tenant_id, id)
+        - addUniqueConstraint:
+            tableName: unit_of_measure
+            columnNames: tenant_id,id
+            constraintName: uq_uom_tenant_id

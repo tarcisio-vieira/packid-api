@@ -1,10 +1,10 @@
 databaseChangeLog:
   - changeSet:
-      id: 0001-create-unit-of-measure
+      id: 0005-create-residential-unit
       author: packid
       changes:
         - createTable:
-            tableName: unit_of_measure
+            tableName: residential_unit
             columns:
               - column:
                   name: id
@@ -20,26 +20,32 @@ databaseChangeLog:
                     nullable: false
 
               - column:
+                  name: condominium_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              # identificador da unidade (ex.: "101", "A-203", "CASA-12")
+              - column:
                   name: code
                   type: varchar(30)
                   constraints:
                     nullable: false
+
               - column:
                   name: name
-                  type: varchar(120)
-                  constraints:
-                    nullable: false
-              - column:
-                  name: description
-                  type: text
-                  constraints:
-                    nullable: true
-              - column:
-                  name: symbol
-                  type: varchar(20)
+                  type: varchar(150)
                   constraints:
                     nullable: true
 
+              - column:
+                  name: active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -79,28 +85,46 @@ databaseChangeLog:
                     nullable: false
 
         - addForeignKeyConstraint:
-            baseTableName: unit_of_measure
+            baseTableName: residential_unit
             baseColumnNames: tenant_id
             referencedTableName: tenant
             referencedColumnNames: id
-            constraintName: fk_uom_tenant
+            constraintName: fk_residential_unit_tenant
             onDelete: RESTRICT
 
-        # único por tenant
-        - addUniqueConstraint:
-            tableName: unit_of_measure
-            columnNames: tenant_id,code
-            constraintName: uq_uom_tenant_code
+        # garante que condominium pertence ao mesmo tenant da unidade
+        - addForeignKeyConstraint:
+            baseTableName: residential_unit
+            baseColumnNames: tenant_id,condominium_id
+            referencedTableName: condominium
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_residential_unit_condominium_same_tenant
+            onDelete: RESTRICT
 
-        # necessário para FK composta (tenant_id, id)
+        # unidade única dentro do condomínio
         - addUniqueConstraint:
-            tableName: unit_of_measure
+            tableName: residential_unit
+            columnNames: condominium_id,code
+            constraintName: uq_residential_unit_condominium_code
+
+        # necessário para FKs compostas (tenant_id, id)
+        - addUniqueConstraint:
+            tableName: residential_unit
             columnNames: tenant_id,id
-            constraintName: uq_uom_tenant_id_id
+            constraintName: uq_residential_unit_tenant_id
 
         - createIndex:
-            tableName: unit_of_measure
-            indexName: idx_uom_tenant_id
+            tableName: residential_unit
+            indexName: idx_residential_unit_tenant_id
             columns:
               - column:
                   name: tenant_id
+
+        - createIndex:
+            tableName: residential_unit
+            indexName: idx_residential_unit_tenant_condominium_id
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: condominium_id

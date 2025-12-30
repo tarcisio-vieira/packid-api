@@ -1,7 +1,7 @@
-package com.packid.api.model;
+package com.packid.api.domain.model;
 
-import com.packid.api.domain.PackageType;
-import com.packid.api.model.base.AuditableEntity;
+import com.packid.api.domain.type.PackageType;
+import com.packid.api.domain.model.base.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,40 +21,56 @@ public class PackId extends AuditableEntity {
     private UUID tenantId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tenant_id", insertable = false, updatable = false)
+    @JoinColumn(name = "tenant_id", referencedColumnName = "id", insertable = false, updatable = false)
     private Tenant tenant;
 
-    @Column(name = "apartment_id", nullable = false, columnDefinition = "uuid")
-    private UUID apartmentId;
+    @Column(name = "residential_unit_id", nullable = false, columnDefinition = "uuid")
+    private UUID residentialUnitId;
 
+    /**
+     * FK composta (tenant_id, residential_unit_id) -> residential_unit(tenant_id, id)
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "apartment_id", insertable = false, updatable = false)
-    private Apartment apartment;
+    @JoinColumns({
+            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
+            @JoinColumn(name = "residential_unit_id", referencedColumnName = "id", insertable = false, updatable = false)
+    })
+    private ResidentialUnit residentialUnit;
 
     @Column(name = "person_id", nullable = false, columnDefinition = "uuid")
     private UUID personId;
 
+    /**
+     * FK composta (tenant_id, person_id) -> person(tenant_id, id)
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "person_id", insertable = false, updatable = false)
+    @JoinColumns({
+            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
+            @JoinColumn(name = "person_id", referencedColumnName = "id", insertable = false, updatable = false)
+    })
     private Person person;
 
     @Column(name = "registered_by_user_id", columnDefinition = "uuid")
     private UUID registeredByUserId;
 
+    /**
+     * FK composta (tenant_id, registered_by_user_id) -> app_user(tenant_id, id)
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "registered_by_user_id", insertable = false, updatable = false)
+    @JoinColumns({
+            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
+            @JoinColumn(name = "registered_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
+    })
     private AppUser registeredBy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "package_type", nullable = false, length = 20)
     private PackageType packageType;
 
-    // QRCode/código de barras (pode ser grande)
     @Lob
     @Column(name = "package_code", columnDefinition = "text")
     private String packageCode;
 
-    // SHA-256 hex (64 chars)
     @Column(name = "package_code_hash", length = 64)
     private String packageCodeHash;
 
@@ -70,7 +86,6 @@ public class PackId extends AuditableEntity {
     @Column(name = "arrived_at", nullable = false)
     private LocalDateTime arrivedAt;
 
-    // WhatsApp
     @Column(name = "whatsapp_message_id", length = 120)
     private String whatsappMessageId;
 
@@ -83,24 +98,34 @@ public class PackId extends AuditableEntity {
     @Column(name = "whatsapp_read_at")
     private LocalDateTime whatsappReadAt;
 
-    // Clique/confirmação do morador
     @Column(name = "resident_acknowledged_at")
     private LocalDateTime residentAcknowledgedAt;
 
-    // Entrega em mãos
     @Column(name = "handed_over_at")
     private LocalDateTime handedOverAt;
 
     @Column(name = "handed_over_by_user_id", columnDefinition = "uuid")
     private UUID handedOverByUserId;
 
+    /**
+     * FK composta (tenant_id, handed_over_by_user_id) -> app_user(tenant_id, id)
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "handed_over_by_user_id", insertable = false, updatable = false)
+    @JoinColumns({
+            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
+            @JoinColumn(name = "handed_over_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
+    })
     private AppUser handedOverBy;
 
-    // Observações
     @Column(name = "observations", columnDefinition = "text")
     private String observations;
+
+    @PrePersist
+    void syncTenantAndArrivedAt() {
+        if (tenantId == null && tenant != null) tenantId = tenant.getId();
+        if (tenantId == null && residentialUnit != null) tenantId = residentialUnit.getTenantId();
+        if (arrivedAt == null) arrivedAt = LocalDateTime.now();
+    }
 
     @PrePersist
     @PreUpdate
@@ -122,7 +147,7 @@ public class PackId extends AuditableEntity {
     }
 
     @Transient
-    public String getApartmentCode() {
-        return apartment != null ? apartment.getApartmentCode() : null;
+    public String getResidentialUnitCode() {
+        return residentialUnit != null ? residentialUnit.getCode() : null;
     }
 }

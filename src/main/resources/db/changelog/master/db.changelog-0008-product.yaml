@@ -1,10 +1,10 @@
 databaseChangeLog:
   - changeSet:
-      id: 0004-create-Condominium.java
+      id: 0008-create-product
       author: packid
       changes:
         - createTable:
-            tableName: Condominium.java
+            tableName: product
             columns:
               - column:
                   name: id
@@ -20,37 +20,36 @@ databaseChangeLog:
                     nullable: false
 
               - column:
+                  name: code
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+
+              - column:
                   name: name
                   type: varchar(200)
                   constraints:
                     nullable: false
 
               - column:
-                  name: address_line1
-                  type: varchar(200)
-                  constraints:
-                    nullable: true
-              - column:
-                  name: address_line2
-                  type: varchar(200)
-                  constraints:
-                    nullable: true
-              - column:
-                  name: city
-                  type: varchar(120)
-                  constraints:
-                    nullable: true
-              - column:
-                  name: state
-                  type: varchar(80)
-                  constraints:
-                    nullable: true
-              - column:
-                  name: zip_code
-                  type: varchar(20)
+                  name: description
+                  type: text
                   constraints:
                     nullable: true
 
+              - column:
+                  name: unit_price
+                  type: numeric(14,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: unit_of_measure_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -90,21 +89,45 @@ databaseChangeLog:
                     nullable: false
 
         - addForeignKeyConstraint:
-            baseTableName: Condominium.java
+            baseTableName: product
             baseColumnNames: tenant_id
             referencedTableName: tenant
             referencedColumnNames: id
-            constraintName: fk_condominium_tenant
+            constraintName: fk_product_tenant
+            onDelete: RESTRICT
+
+        # garante que UOM pertence ao mesmo tenant do produto
+        - addForeignKeyConstraint:
+            baseTableName: product
+            baseColumnNames: tenant_id,unit_of_measure_id
+            referencedTableName: unit_of_measure
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_product_uom_same_tenant
             onDelete: RESTRICT
 
         - addUniqueConstraint:
-            tableName: Condominium.java
-            columnNames: tenant_id,name
-            constraintName: uq_condominium_tenant_name
+            tableName: product
+            columnNames: tenant_id,code
+            constraintName: uq_product_tenant_code
+
+        # (opcional) padrão para futuras FKs compostas apontando para product
+        - addUniqueConstraint:
+            tableName: product
+            columnNames: tenant_id,id
+            constraintName: uq_product_tenant_id
 
         - createIndex:
-            tableName: Condominium.java
-            indexName: idx_condominium_tenant_id
+            tableName: product
+            indexName: idx_product_tenant_id
             columns:
               - column:
                   name: tenant_id
+
+        - createIndex:
+            tableName: product
+            indexName: idx_product_tenant_uom_id
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: unit_of_measure_id

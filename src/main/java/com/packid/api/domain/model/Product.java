@@ -1,6 +1,6 @@
-package com.packid.api.model;
+package com.packid.api.domain.model;
 
-import com.packid.api.model.base.AuditableEntity;
+import com.packid.api.domain.model.base.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,14 +34,7 @@ public class Product extends AuditableEntity {
     @Column(name = "unit_price", nullable = false, precision = 14, scale = 2)
     private BigDecimal unitPrice;
 
-    /**
-     * FK composta no banco: (tenant_id, unit_of_measure_id) -> unit_of_measure(tenant_id, id)
-     * Tenant_id vem do Product. O join usa tenant_id (somente leitura) + unit_of_measure_id.
-     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "unit_of_measure_id", referencedColumnName = "id", nullable = false)
-    })
+    @JoinColumn(name = "unit_of_measure_id", nullable = false)
     private UnitOfMeasure unitOfMeasure;
 }

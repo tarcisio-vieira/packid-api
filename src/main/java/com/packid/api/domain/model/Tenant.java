@@ -1,6 +1,6 @@
-package com.packid.api.model;
+package com.packid.api.domain.model;
 
-import com.packid.api.model.base.AuditableEntity;
+import com.packid.api.domain.model.base.AuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;

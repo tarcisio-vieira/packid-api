@@ -1,6 +1,6 @@
 databaseChangeLog:
   - changeSet:
-      id: 0007-create-person
+      id: 0002-create-person
       author: packid
       changes:
         - createTable:
@@ -15,12 +15,6 @@ databaseChangeLog:
 
               - column:
                   name: tenant_id
-                  type: uuid
-                  constraints:
-                    nullable: false
-
-              - column:
-                  name: apartment_id
                   type: uuid
                   constraints:
                     nullable: false
@@ -53,8 +47,9 @@ databaseChangeLog:
                   name: person_type
                   type: varchar(30)
                   constraints:
-                    nullable: true
+                    nullable: false
 
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -101,13 +96,11 @@ databaseChangeLog:
             constraintName: fk_person_tenant
             onDelete: RESTRICT
 
-        - addForeignKeyConstraint:
-            baseTableName: person
-            baseColumnNames: apartment_id
-            referencedTableName: apartment
-            referencedColumnNames: id
-            constraintName: fk_person_apartment
-            onDelete: RESTRICT
+        # necessário para FKs compostas (tenant_id, id)
+        - addUniqueConstraint:
+            tableName: person
+            columnNames: tenant_id,id
+            constraintName: uq_person_tenant_id
 
         - createIndex:
             tableName: person
@@ -115,10 +108,3 @@ databaseChangeLog:
             columns:
               - column:
                   name: tenant_id
-
-        - createIndex:
-            tableName: person
-            indexName: idx_person_apartment_id
-            columns:
-              - column:
-                  name: apartment_id

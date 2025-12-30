@@ -1,6 +1,6 @@
 databaseChangeLog:
   - changeSet:
-      id: 0009-create-pack-id
+      id: 0006-create-pack-id
       author: packid
       changes:
         - createTable:
@@ -19,40 +19,36 @@ databaseChangeLog:
                   constraints:
                     nullable: false
 
-              # Identificação do morador/unidade
               - column:
-                  name: apartment_id
+                  name: residential_unit_id
                   type: uuid
                   constraints:
                     nullable: false
+
               - column:
                   name: person_id
                   type: uuid
                   constraints:
                     nullable: false
 
-              # Quem registrou na portaria (opcional)
               - column:
                   name: registered_by_user_id
                   type: uuid
                   constraints:
                     nullable: true
 
-              # Dados da encomenda
               - column:
                   name: package_type
                   type: varchar(20)
                   constraints:
                     nullable: false
 
-              # QRCode / Código de barras (pode ser grande)
               - column:
                   name: package_code
                   type: text
                   constraints:
                     nullable: true
 
-              # Hash para busca/uniqueness eficiente
               - column:
                   name: package_code_hash
                   type: char(64)
@@ -75,7 +71,6 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
-              # Chegada na portaria
               - column:
                   name: arrived_at
                   type: timestamp
@@ -83,7 +78,6 @@ databaseChangeLog:
                   constraints:
                     nullable: false
 
-              # WhatsApp (status)
               - column:
                   name: whatsapp_message_id
                   type: varchar(120)
@@ -105,14 +99,12 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
-              # Clique/confirmação do morador ("recebi em mãos")
               - column:
                   name: resident_acknowledged_at
                   type: timestamp
                   constraints:
                     nullable: true
 
-              # Entrega efetiva (opcional separar do clique)
               - column:
                   name: handed_over_at
                   type: timestamp
@@ -124,7 +116,6 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
-              # Observações
               - column:
                   name: observations
                   type: text
@@ -180,66 +171,58 @@ databaseChangeLog:
 
         - addForeignKeyConstraint:
             baseTableName: pack_id
-            baseColumnNames: apartment_id
-            referencedTableName: apartment
-            referencedColumnNames: id
-            constraintName: fk_pack_id_apartment
+            baseColumnNames: tenant_id,residential_unit_id
+            referencedTableName: residential_unit
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_pack_id_residential_unit_same_tenant
             onDelete: RESTRICT
 
         - addForeignKeyConstraint:
             baseTableName: pack_id
-            baseColumnNames: person_id
+            baseColumnNames: tenant_id,person_id
             referencedTableName: person
-            referencedColumnNames: id
-            constraintName: fk_pack_id_person
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_pack_id_person_same_tenant
             onDelete: RESTRICT
 
         - addForeignKeyConstraint:
             baseTableName: pack_id
-            baseColumnNames: registered_by_user_id
+            baseColumnNames: tenant_id,registered_by_user_id
             referencedTableName: app_user
-            referencedColumnNames: id
-            constraintName: fk_pack_id_registered_by
-            onDelete: SET NULL
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_pack_id_registered_by_same_tenant
+            onDelete: RESTRICT
 
         - addForeignKeyConstraint:
             baseTableName: pack_id
-            baseColumnNames: handed_over_by_user_id
+            baseColumnNames: tenant_id,handed_over_by_user_id
             referencedTableName: app_user
-            referencedColumnNames: id
-            constraintName: fk_pack_id_handed_over_by
-            onDelete: SET NULL
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_pack_id_handed_over_by_same_tenant
+            onDelete: RESTRICT
 
         - createIndex:
             tableName: pack_id
-            indexName: idx_pack_id_tenant_apartment_arrived
+            indexName: idx_pack_id_tenant_unit_arrived
             columns:
               - column:
                   name: tenant_id
               - column:
-                  name: apartment_id
+                  name: residential_unit_id
               - column:
                   name: arrived_at
 
         - createIndex:
             tableName: pack_id
-            indexName: idx_pack_id_tenant_whatsapp_msg
+            indexName: idx_pack_id_tenant_person_arrived
             columns:
               - column:
                   name: tenant_id
               - column:
-                  name: whatsapp_message_id
-
-        - createIndex:
-            tableName: pack_id
-            indexName: idx_pack_id_tenant_tracking
-            columns:
+                  name: person_id
               - column:
-                  name: tenant_id
-              - column:
-                  name: tracking_code
+                  name: arrived_at
 
-        # Busca eficiente por QR/barcode (via hash)
         - createIndex:
             tableName: pack_id
             indexName: idx_pack_id_tenant_package_code_hash
@@ -249,7 +232,6 @@ databaseChangeLog:
               - column:
                   name: package_code_hash
 
-        # Opcional, mas recomendado: evita duplicar o mesmo código dentro do tenant
         - addUniqueConstraint:
             tableName: pack_id
             columnNames: tenant_id,package_code_hash

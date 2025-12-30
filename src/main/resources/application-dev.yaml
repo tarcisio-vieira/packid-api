@@ -1,20 +1,23 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/packid_dev
+    url: jdbc:postgresql://localhost:5433/packid_dev
     username: packid_dev
     password: packid_dev
     driver-class-name: org.postgresql.Driver
 
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
   jpa:
     hibernate:
-      ddl-auto: none
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+      ddl-auto: validate
 
 logging:
   level:
     root: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+app:
+  frontend-url: "http://localhost:5173"

@@ -1,10 +1,10 @@
 databaseChangeLog:
   - changeSet:
-      id: 0006-create-apartment
+      id: 0004-create-condominium
       author: packid
       changes:
         - createTable:
-            tableName: apartment
+            tableName: condominium
             columns:
               - column:
                   name: id
@@ -14,23 +14,44 @@ databaseChangeLog:
                     nullable: false
 
               - column:
-                  name: block_id
+                  name: tenant_id
                   type: uuid
                   constraints:
                     nullable: false
 
               - column:
-                  name: floor
-                  type: smallint
+                  name: name
+                  type: varchar(150)
                   constraints:
                     nullable: false
 
               - column:
-                  name: apartment_number
-                  type: smallint
+                  name: address_line1
+                  type: varchar(200)
                   constraints:
-                    nullable: false
+                    nullable: true
+              - column:
+                  name: address_line2
+                  type: varchar(200)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: city
+                  type: varchar(120)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: state
+                  type: varchar(60)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: zip_code
+                  type: varchar(20)
+                  constraints:
+                    nullable: true
 
+              # auditoria / soft delete
               - column:
                   name: created_at
                   type: timestamp
@@ -70,31 +91,27 @@ databaseChangeLog:
                     nullable: false
 
         - addForeignKeyConstraint:
-            baseTableName: apartment
-            baseColumnNames: block_id
-            referencedTableName: block
+            baseTableName: condominium
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
             referencedColumnNames: id
-            constraintName: fk_apartment_block
-            onDelete: CASCADE
+            constraintName: fk_condominium_tenant
+            onDelete: RESTRICT
 
         - addUniqueConstraint:
-            tableName: apartment
-            columnNames: block_id,floor,apartment_number
-            constraintName: uq_apartment_block_floor_number
+            tableName: condominium
+            columnNames: tenant_id,name
+            constraintName: uq_condominium_tenant_name
 
-        - addCheckConstraint:
-            tableName: apartment
-            constraintName: ck_apartment_floor_1_12
-            checkConstraint: "floor between 1 and 12"
-
-        - addCheckConstraint:
-            tableName: apartment
-            constraintName: ck_apartment_number_1_8
-            checkConstraint: "apartment_number between 1 and 8"
+        # necessário para FKs compostas (tenant_id, id)
+        - addUniqueConstraint:
+            tableName: condominium
+            columnNames: tenant_id,id
+            constraintName: uq_condominium_tenant_id
 
         - createIndex:
-            tableName: apartment
-            indexName: idx_apartment_block_id
+            tableName: condominium
+            indexName: idx_condominium_tenant_id
             columns:
               - column:
-                  name: block_id
+                  name: tenant_id

@@ -1,4 +1,4 @@
-package com.packid.api.domain;
+package com.packid.api.domain.type;
 
 public enum PackageType {
     PACKAGE,

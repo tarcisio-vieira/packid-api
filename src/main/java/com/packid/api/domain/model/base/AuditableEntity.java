@@ -1,4 +1,4 @@
-package com.packid.api.model.base;
+package com.packid.api.domain.model.base;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
@@ -36,15 +36,21 @@ public abstract class AuditableEntity extends BaseUuidEntity {
     private Boolean deleted;
 
     @PrePersist
-    protected void onCreate() {
+    protected final void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (deleted == null) deleted = false;
-        // createdBy usuário logado setado no service
+        if (createdBy == null || createdBy.isBlank()) createdBy = "system";
+
+        prePersistHook();
     }
 
     @PreUpdate
-    protected void onUpdate() {
+    protected final void onUpdate() {
         updatedAt = LocalDateTime.now();
-        // updatedBy usuário logado setado no service
+        preUpdateHook();
     }
+
+    // Subclasses sobrescrevem SEM @PrePersist/@PreUpdate
+    protected void prePersistHook() {}
+    protected void preUpdateHook() {}
 }
