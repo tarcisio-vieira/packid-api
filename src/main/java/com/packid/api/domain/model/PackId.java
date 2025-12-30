@@ -21,15 +21,13 @@ public class PackId extends AuditableEntity {
     private UUID tenantId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tenant_id", referencedColumnName = "id", insertable = false, updatable = false)
+    @JoinColumn(name = "tenant_id", insertable = false, updatable = false)
     private Tenant tenant;
 
     @Column(name = "residential_unit_id", nullable = false, columnDefinition = "uuid")
     private UUID residentialUnitId;
 
-    /**
-     * FK composta (tenant_id, residential_unit_id) -> residential_unit(tenant_id, id)
-     */
+    // FK composta: (tenant_id, residential_unit_id) -> residential_unit(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumns({
             @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
@@ -40,9 +38,7 @@ public class PackId extends AuditableEntity {
     @Column(name = "person_id", nullable = false, columnDefinition = "uuid")
     private UUID personId;
 
-    /**
-     * FK composta (tenant_id, person_id) -> person(tenant_id, id)
-     */
+    // FK composta: (tenant_id, person_id) -> person(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumns({
             @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
@@ -53,9 +49,6 @@ public class PackId extends AuditableEntity {
     @Column(name = "registered_by_user_id", columnDefinition = "uuid")
     private UUID registeredByUserId;
 
-    /**
-     * FK composta (tenant_id, registered_by_user_id) -> app_user(tenant_id, id)
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
@@ -107,9 +100,6 @@ public class PackId extends AuditableEntity {
     @Column(name = "handed_over_by_user_id", columnDefinition = "uuid")
     private UUID handedOverByUserId;
 
-    /**
-     * FK composta (tenant_id, handed_over_by_user_id) -> app_user(tenant_id, id)
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
@@ -120,16 +110,18 @@ public class PackId extends AuditableEntity {
     @Column(name = "observations", columnDefinition = "text")
     private String observations;
 
-    @PrePersist
-    void syncTenantAndArrivedAt() {
-        if (tenantId == null && tenant != null) tenantId = tenant.getId();
-        if (tenantId == null && residentialUnit != null) tenantId = residentialUnit.getTenantId();
+    @Override
+    protected void prePersistHook() {
+        computePackageCodeHash();
         if (arrivedAt == null) arrivedAt = LocalDateTime.now();
     }
 
-    @PrePersist
-    @PreUpdate
-    void computePackageCodeHash() {
+    @Override
+    protected void preUpdateHook() {
+        computePackageCodeHash();
+    }
+
+    private void computePackageCodeHash() {
         this.packageCodeHash = sha256Hex(packageCode);
     }
 
@@ -147,7 +139,8 @@ public class PackId extends AuditableEntity {
     }
 
     @Transient
-    public String getResidentialUnitCode() {
+    public String getUnitCode() {
         return residentialUnit != null ? residentialUnit.getCode() : null;
     }
 }
+

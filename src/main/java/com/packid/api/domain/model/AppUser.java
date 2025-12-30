@@ -15,9 +15,7 @@ import java.util.UUID;
         name = "app_user",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uq_app_user_tenant_email", columnNames = {"tenant_id", "email"}),
-                @UniqueConstraint(name = "uq_app_user_tenant_provider_subject", columnNames = {"tenant_id", "provider", "provider_subject"}),
-                // necessário se pack_id usar FK composta (tenant_id, registered_by_user_id / handed_over_by_user_id)
-                @UniqueConstraint(name = "uq_app_user_tenant_id", columnNames = {"tenant_id", "id"})
+                @UniqueConstraint(name = "uq_app_user_tenant_provider_subject", columnNames = {"tenant_id", "provider", "provider_subject"})
         }
 )
 public class AppUser extends AuditableEntity {
@@ -26,15 +24,13 @@ public class AppUser extends AuditableEntity {
     private UUID tenantId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tenant_id", referencedColumnName = "id", insertable = false, updatable = false)
+    @JoinColumn(name = "tenant_id", insertable = false, updatable = false)
     private Tenant tenant;
 
     @Column(name = "person_id", columnDefinition = "uuid")
     private UUID personId;
 
-    /**
-     * FK composta (tenant_id, person_id) -> person(tenant_id, id)
-     */
+    // FK composta: (tenant_id, person_id) -> person(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
@@ -63,16 +59,6 @@ public class AppUser extends AuditableEntity {
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
-
-    @PrePersist
-    void syncTenant() {
-        if (tenantId == null && tenant != null) {
-            tenantId = tenant.getId();
-        }
-        if (tenantId == null && person != null) {
-            tenantId = person.getTenantId();
-        }
-    }
 
     public enum AuthProvider {
         GOOGLE
