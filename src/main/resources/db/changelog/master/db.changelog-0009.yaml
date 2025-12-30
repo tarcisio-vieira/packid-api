@@ -1,0 +1,224 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0009-create-pack-id
+      author: packid
+      changes:
+        - createTable:
+            tableName: pack_id
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              # Identificação do morador/unidade
+              - column:
+                  name: apartment_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: person_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              # Quem registrou na portaria (opcional)
+              - column:
+                  name: registered_by_user_id
+                  type: uuid
+                  constraints:
+                    nullable: true
+
+              # Dados da encomenda
+              - column:
+                  name: package_type
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: carrier
+                  type: varchar(80)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: tracking_code
+                  type: varchar(80)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: description
+                  type: text
+                  constraints:
+                    nullable: true
+
+              # Quando chegou na portaria
+              - column:
+                  name: arrived_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              # WhatsApp (integração/validações)
+              - column:
+                  name: whatsapp_message_id
+                  type: varchar(120)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: whatsapp_sent_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: whatsapp_delivered_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: whatsapp_read_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+
+              # Confirmação do morador ("recebi em mãos")
+              - column:
+                  name: resident_acknowledged_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+
+              # Entrega efetiva (se quiser separar do clique)
+              - column:
+                  name: handed_over_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: handed_over_by_user_id
+                  type: uuid
+                  constraints:
+                    nullable: true
+
+              - column:
+                  name: notes
+                  type: text
+                  constraints:
+                    nullable: true
+
+              # auditoria / soft delete (mesmo padrão)
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_at
+                  type: timestamp
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: pack_id
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_pack_id_tenant
+            onDelete: RESTRICT
+
+        - addForeignKeyConstraint:
+            baseTableName: pack_id
+            baseColumnNames: apartment_id
+            referencedTableName: apartment
+            referencedColumnNames: id
+            constraintName: fk_pack_id_apartment
+            onDelete: RESTRICT
+
+        - addForeignKeyConstraint:
+            baseTableName: pack_id
+            baseColumnNames: person_id
+            referencedTableName: person
+            referencedColumnNames: id
+            constraintName: fk_pack_id_person
+            onDelete: RESTRICT
+
+        - addForeignKeyConstraint:
+            baseTableName: pack_id
+            baseColumnNames: registered_by_user_id
+            referencedTableName: app_user
+            referencedColumnNames: id
+            constraintName: fk_pack_id_registered_by
+            onDelete: SET NULL
+
+        - addForeignKeyConstraint:
+            baseTableName: pack_id
+            baseColumnNames: handed_over_by_user_id
+            referencedTableName: app_user
+            referencedColumnNames: id
+            constraintName: fk_pack_id_handed_over_by
+            onDelete: SET NULL
+
+        - createIndex:
+            tableName: pack_id
+            indexName: idx_pack_id_tenant_apartment_arrived
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: apartment_id
+              - column:
+                  name: arrived_at
+
+        - createIndex:
+            tableName: pack_id
+            indexName: idx_pack_id_tenant_whatsapp_msg
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: whatsapp_message_id
+
+        - createIndex:
+            tableName: pack_id
+            indexName: idx_pack_id_tenant_tracking
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: tracking_code
