@@ -25,7 +25,6 @@ databaseChangeLog:
                   constraints:
                     nullable: false
 
-              # identificador da unidade (ex.: "101", "A-203", "CASA-12")
               - column:
                   name: code
                   type: varchar(30)
@@ -92,7 +91,7 @@ databaseChangeLog:
             constraintName: fk_residential_unit_tenant
             onDelete: RESTRICT
 
-        # garante que condominium pertence ao mesmo tenant da unidade
+        # FK composta garante mesmo tenant do condomínio
         - addForeignKeyConstraint:
             baseTableName: residential_unit
             baseColumnNames: tenant_id,condominium_id
@@ -101,11 +100,11 @@ databaseChangeLog:
             constraintName: fk_residential_unit_condominium_same_tenant
             onDelete: RESTRICT
 
-        # unidade única dentro do condomínio
+        # unidade única dentro do condomínio (por tenant)
         - addUniqueConstraint:
             tableName: residential_unit
-            columnNames: condominium_id,code
-            constraintName: uq_residential_unit_condominium_code
+            columnNames: tenant_id,condominium_id,code
+            constraintName: uq_residential_unit_tenant_condominium_code
 
         # necessário para FKs compostas (tenant_id, id)
         - addUniqueConstraint:

@@ -1,3 +1,4 @@
+# db.changelog-0006-packid.yaml
 databaseChangeLog:
   - changeSet:
       id: 0006-create-pack-id
@@ -49,9 +50,10 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
+              # SHA-256 hex (64 chars)
               - column:
                   name: package_code_hash
-                  type: char(64)
+                  type: varchar(64)
                   constraints:
                     nullable: true
 
@@ -60,11 +62,13 @@ databaseChangeLog:
                   type: varchar(80)
                   constraints:
                     nullable: true
+
               - column:
                   name: tracking_code
                   type: varchar(80)
                   constraints:
                     nullable: true
+
               - column:
                   name: description
                   type: text
@@ -78,6 +82,7 @@ databaseChangeLog:
                   constraints:
                     nullable: false
 
+              # WhatsApp
               - column:
                   name: whatsapp_message_id
                   type: varchar(120)
@@ -99,12 +104,14 @@ databaseChangeLog:
                   constraints:
                     nullable: true
 
+              # confirmação do morador
               - column:
                   name: resident_acknowledged_at
                   type: timestamp
                   constraints:
                     nullable: true
 
+              # entrega em mãos
               - column:
                   name: handed_over_at
                   type: timestamp
@@ -169,6 +176,7 @@ databaseChangeLog:
             constraintName: fk_pack_id_tenant
             onDelete: RESTRICT
 
+        # garante que a unidade residencial pertence ao mesmo tenant
         - addForeignKeyConstraint:
             baseTableName: pack_id
             baseColumnNames: tenant_id,residential_unit_id
@@ -177,6 +185,7 @@ databaseChangeLog:
             constraintName: fk_pack_id_residential_unit_same_tenant
             onDelete: RESTRICT
 
+        # garante que a pessoa pertence ao mesmo tenant
         - addForeignKeyConstraint:
             baseTableName: pack_id
             baseColumnNames: tenant_id,person_id
@@ -185,6 +194,7 @@ databaseChangeLog:
             constraintName: fk_pack_id_person_same_tenant
             onDelete: RESTRICT
 
+        # usuário que cadastrou (opcional) no mesmo tenant
         - addForeignKeyConstraint:
             baseTableName: pack_id
             baseColumnNames: tenant_id,registered_by_user_id
@@ -193,6 +203,7 @@ databaseChangeLog:
             constraintName: fk_pack_id_registered_by_same_tenant
             onDelete: RESTRICT
 
+        # usuário que entregou (opcional) no mesmo tenant
         - addForeignKeyConstraint:
             baseTableName: pack_id
             baseColumnNames: tenant_id,handed_over_by_user_id
@@ -205,34 +216,32 @@ databaseChangeLog:
             tableName: pack_id
             indexName: idx_pack_id_tenant_unit_arrived
             columns:
-              - column:
-                  name: tenant_id
-              - column:
-                  name: residential_unit_id
-              - column:
-                  name: arrived_at
+              - column: { name: tenant_id }
+              - column: { name: residential_unit_id }
+              - column: { name: arrived_at }
 
         - createIndex:
             tableName: pack_id
             indexName: idx_pack_id_tenant_person_arrived
             columns:
-              - column:
-                  name: tenant_id
-              - column:
-                  name: person_id
-              - column:
-                  name: arrived_at
+              - column: { name: tenant_id }
+              - column: { name: person_id }
+              - column: { name: arrived_at }
 
         - createIndex:
             tableName: pack_id
             indexName: idx_pack_id_tenant_package_code_hash
             columns:
-              - column:
-                  name: tenant_id
-              - column:
-                  name: package_code_hash
+              - column: { name: tenant_id }
+              - column: { name: package_code_hash }
 
         - addUniqueConstraint:
             tableName: pack_id
             columnNames: tenant_id,package_code_hash
             constraintName: uq_pack_id_tenant_package_code_hash
+
+        # padronização p/ futuras FKs compostas apontando para pack_id
+        - addUniqueConstraint:
+            tableName: pack_id
+            columnNames: tenant_id,id
+            constraintName: uq_pack_id_tenant_id

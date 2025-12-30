@@ -115,7 +115,7 @@ databaseChangeLog:
             constraintName: fk_app_user_tenant
             onDelete: RESTRICT
 
-        # garante que person pertence ao mesmo tenant do app_user
+        # FK composta garante mesmo tenant
         - addForeignKeyConstraint:
             baseTableName: app_user
             baseColumnNames: tenant_id,person_id
