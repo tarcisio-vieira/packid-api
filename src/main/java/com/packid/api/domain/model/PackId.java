@@ -67,6 +67,9 @@ public class PackId extends AuditableEntity {
     @Column(name = "package_code_hash", length = 64)
     private String packageCodeHash;
 
+    @Column(name = "label_package_code", columnDefinition = "text")
+    private String labelPackageCode;
+
     @Column(name = "carrier", length = 80)
     private String carrier;
 

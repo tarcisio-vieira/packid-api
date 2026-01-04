@@ -1,0 +1,12 @@
+# db.changelog-0010-packid.yaml
+databaseChangeLog:
+  - changeSet:
+      id: 0010-packid-add-label-package-code
+      author: packid
+      changes:
+        - addColumn:
+            tableName: pack_id
+            columns:
+              - column:
+                  name: label_package_code
+                  type: text

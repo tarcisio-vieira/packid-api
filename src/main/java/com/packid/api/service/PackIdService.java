@@ -1,6 +1,7 @@
 package com.packid.api.service;
 
 import com.packid.api.controller.packid.dto.PackIdCreateRequest;
+import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.packid.dto.PackIdResponse;
 import com.packid.api.controller.packid.dto.PackIdUpdateRequest;
 import com.packid.api.domain.model.PackId;
@@ -10,6 +11,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.packid.api.controller.packid.dto.PackIdLabelCreateRequest;
+import com.packid.api.domain.model.AppUser;
+import com.packid.api.domain.model.Person;
+import com.packid.api.domain.model.ResidentialUnit;
+import com.packid.api.domain.repository.AppUserRepository;
+import com.packid.api.domain.repository.PersonRepository;
+import com.packid.api.domain.repository.ResidentialUnitRepository;
+import com.packid.api.domain.type.PackageType;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -18,9 +31,20 @@ import java.util.UUID;
 public class PackIdService {
 
     private final PackIdRepository repository;
+    private final AppUserRepository appUserRepository;
+    private final ResidentialUnitRepository residentialUnitRepository;
+    private final PersonRepository personRepository;
 
-    public PackIdService(PackIdRepository repository) {
+    public PackIdService(
+            PackIdRepository repository,
+            AppUserRepository appUserRepository,
+            ResidentialUnitRepository residentialUnitRepository,
+            PersonRepository personRepository
+    ) {
         this.repository = repository;
+        this.appUserRepository = appUserRepository;
+        this.residentialUnitRepository = residentialUnitRepository;
+        this.personRepository = personRepository;
     }
 
     @Transactional
@@ -148,4 +172,151 @@ public class PackIdService {
     private String normalizeActor(String actor) {
         return (actor == null || actor.isBlank()) ? "system" : actor.trim();
     }
+
+    @Transactional
+    public PackIdResponse createFromLabel(OidcUser oidcUser, PackIdLabelCreateRequest req) {
+        if (oidcUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário não autenticado");
+        }
+
+        String email = (oidcUser.getEmail() != null) ? oidcUser.getEmail().trim() : null;
+        String subject = (oidcUser.getSubject() != null) ? oidcUser.getSubject().trim() : null;
+
+        AppUser appUser = resolveAppUser(email, subject);
+
+        UUID tenantId = appUser.getTenantId();
+
+        String apartment = req.apartment().trim();
+        String packageCode = req.packageCode().trim();
+
+        // 1) unidade residencial pelo "code" (apartment) dentro do tenant
+        List<ResidentialUnit> units = residentialUnitRepository
+                .findAllByTenantIdAndCodeAndDeletedFalse(tenantId, apartment);
+
+        if (units.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Apartamento não encontrado: " + apartment
+            );
+        }
+        if (units.size() > 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Apartamento '" + apartment + "' existe em mais de um condomínio neste tenant. " +
+                            "Para ficar 100% determinístico, será preciso informar o condomínio também."
+            );
+        }
+
+        ResidentialUnit unit = units.get(0);
+
+        // 2) personId: usa o personId do appUser (caminho mais enxuto)
+        UUID personId = appUser.getPersonId();
+        if (personId == null) {
+            // fallback opcional: tenta achar person pelo email
+            if (email != null && !email.isBlank()) {
+                Person p = personRepository.findByTenantIdAndEmailAndDeletedFalse(tenantId, email)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.CONFLICT,
+                                "AppUser não tem person_id e não achei Person pelo email. Cadastre o vínculo (app_user.person_id)."
+                        ));
+                personId = p.getId();
+            } else {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "AppUser não tem person_id. Cadastre o vínculo (app_user.person_id)."
+                );
+            }
+        }
+
+        // 3) cria o packId
+        PackId p = new PackId();
+        p.setTenantId(tenantId);
+        p.setResidentialUnitId(unit.getId());
+        p.setPersonId(personId);
+
+        // quem registrou (opcional na tabela, mas útil)
+        p.setRegisteredByUserId(appUser.getId());
+
+        // default simples
+        p.setPackageType(PackageType.PACKAGE);
+        p.setPackageCode(packageCode);
+        p.setLabelPackageCode(packageCode);
+
+        // createdBy: usa email (se não tiver, cai no "system" do AuditableEntity)
+        if (email != null && !email.isBlank()) {
+            p.setCreatedBy(email);
+        }
+
+        try {
+            PackId saved = repository.save(p);
+            return toResponse(saved);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Não foi possível salvar o pacote. Verifique apartamento/usuário/person vinculados ao tenant."
+            );
+        }
+    }
+
+    private AppUser resolveAppUser(String email, String subject) {
+        // 1) tenta provider+subject
+        if (subject != null && !subject.isBlank()) {
+            List<AppUser> bySub = appUserRepository
+                    .findAllByProviderAndProviderSubjectAndDeletedFalse(AppUser.AuthProvider.GOOGLE, subject);
+
+            if (bySub.size() == 1) return bySub.get(0);
+
+            if (bySub.size() > 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Google subject encontrado em mais de um AppUser. Ajuste o modelo/seed para ficar único."
+                );
+            }
+        }
+
+        // 2) fallback: email
+        if (email != null && !email.isBlank()) {
+            List<AppUser> byEmail = appUserRepository.findAllByEmailAndDeletedFalse(email);
+
+            if (byEmail.size() == 1) return byEmail.get(0);
+
+            if (byEmail.isEmpty()) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Não encontrei AppUser para o email: " + email
+                );
+            }
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email existe em mais de um AppUser. Para ficar determinístico, prefira provider_subject (sub)."
+            );
+        }
+
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "OIDC sem email e sem subject (sub).");
+    }
+
+    @Transactional
+    public List<PackIdRecentResponse> getRecentForMe(OidcUser oidcUser, int limit, Instant from, Instant to) {
+        AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
+        UUID tenantId = appUser.getTenantId();
+
+        int safeLimit = Math.min(Math.max(limit, 1), 200);
+
+        java.sql.Timestamp fromTs = (from == null) ? null : java.sql.Timestamp.from(from);
+        java.sql.Timestamp toTs = (to == null) ? null : java.sql.Timestamp.from(to);
+
+        return repository.findRecentByTenant(tenantId, safeLimit, fromTs, toTs).stream()
+                .map(r -> new PackIdRecentResponse(
+                        r.getId(),
+                        r.getApartment(),
+                        r.getPackageCode(),
+                        r.getLabelPackageCode(),
+                        r.getArrivedAt(),
+                        r.getCreatedBy()
+                ))
+                .toList();
+    }
+
+
 }

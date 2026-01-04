@@ -32,4 +32,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
             AuthProvider provider,
             String providerSubject
     );
+
+    List<AppUser> findAllByProviderAndProviderSubjectAndDeletedFalse(AuthProvider provider, String providerSubject);
+
+    List<AppUser> findAllByEmailAndDeletedFalse(String email);
 }

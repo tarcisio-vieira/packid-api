@@ -15,4 +15,8 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0007-uom.yaml
   - include:
       file: db/changelog/master/db.changelog-0008-product.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0009-packid.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0010-packid.yaml
 

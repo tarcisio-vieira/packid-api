@@ -1,0 +1,9 @@
+# db.changelog-0009-packid.yaml
+databaseChangeLog:
+  - changeSet:
+      id: 0009-drop-unique-pack-id-tenant-package-code-hash
+      author: packid
+      changes:
+        - dropUniqueConstraint:
+            tableName: pack_id
+            constraintName: uq_pack_id_tenant_package_code_hash

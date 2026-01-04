@@ -26,4 +26,6 @@ public interface ResidentialUnitRepository extends JpaRepository<ResidentialUnit
 
     List<ResidentialUnit> findAllByCondominiumIdAndDeletedFalse(UUID condominiumId);
     List<ResidentialUnit> findAllByCondominiumIdAndActiveTrueAndDeletedFalse(UUID condominiumId);
+
+    List<ResidentialUnit> findAllByTenantIdAndCodeAndDeletedFalse(UUID tenantId, String code);
 }

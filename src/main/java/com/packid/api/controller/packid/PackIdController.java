@@ -1,5 +1,6 @@
 package com.packid.api.controller.packid;
 
+import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.packid.dto.PackIdCreateRequest;
 import com.packid.api.controller.packid.dto.PackIdResponse;
 import com.packid.api.controller.packid.dto.PackIdUpdateRequest;
@@ -10,7 +11,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import com.packid.api.controller.packid.dto.PackIdLabelCreateRequest;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,5 +75,27 @@ public class PackIdController {
     ) {
         service.logicalDelete(tenantId, id, actor);
         return ResponseEntity.noContent().build();
+    }
+
+    // POST /api/pack-ids/from-label  (usa OIDC para descobrir tenant/user/person)
+    @PostMapping("/from-label")
+    public ResponseEntity<PackIdResponse> createFromLabel(
+            @AuthenticationPrincipal OidcUser user,
+            @Valid @RequestBody PackIdLabelCreateRequest request
+    ) {
+        PackIdResponse created = service.createFromLabel(user, request);
+
+        URI location = URI.create("/api/pack-ids/" + created.id() + "?tenantId=" + created.tenantId());
+        return ResponseEntity.created(location).body(created);
+    }
+
+    @GetMapping("/recent")
+    public ResponseEntity<List<PackIdRecentResponse>> recent(
+            @AuthenticationPrincipal OidcUser user,
+            @RequestParam(defaultValue = "500") int limit,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to
+    ) {
+        return ResponseEntity.ok(service.getRecentForMe(user, limit, from, to));
     }
 }
