@@ -11,6 +11,7 @@
 	<groupId>com.packid</groupId>
 	<artifactId>packid-api</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
+	<packaging>war</packaging>
 	<name>PackID API</name>
 	<description>Backend API for the PackID – Package Identification System</description>
 	<url/>
@@ -125,5 +126,16 @@
 			</plugin>
 		</plugins>
 	</build>
-
+	<profiles>
+		<profile>
+			<id>aws-tomcat</id>
+			<dependencies>
+				<dependency>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-tomcat</artifactId>
+					<scope>provided</scope>
+				</dependency>
+			</dependencies>
+		</profile>
+	</profiles>
 </project>

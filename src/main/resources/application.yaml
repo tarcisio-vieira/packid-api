@@ -35,3 +35,24 @@ logging:
 
 app:
   frontend-url: ${FRONTEND_URL}
+
+whatsapp:
+  enabled: ${WHATSAPP_ENABLED:true}
+  apiVersion: ${WHATSAPP_API_VERSION:v21.0}
+  phoneNumberId: ${WHATSAPP_PHONE_NUMBER_ID:05521979187226}
+  accessToken: ${WHATSAPP_ACCESS_TOKEN:}
+  templateName: ${WHATSAPP_TEMPLATE_NAME:packid_encomenda_chegou}
+  language: ${WHATSAPP_LANGUAGE:pt_BR}
+
+#  enabled: ${WHATSAPP_ENABLED:false}
+#  apiVersion: ${WHATSAPP_API_VERSION:v21.0}
+#  phoneNumberId: ${WHATSAPP_PHONE_NUMBER_ID:}
+#  accessToken: ${WHATSAPP_ACCESS_TOKEN:}
+#  templateName: ${WHATSAPP_TEMPLATE_NAME:packid_encomenda_chegou}
+#  language: ${WHATSAPP_LANGUAGE:pt_BR}
+#
+#  WHATSAPP_ENABLED=true
+#  WHATSAPP_PHONE_NUMBER_ID=SEU_PHONE_NUMBER_ID
+#  WHATSAPP_ACCESS_TOKEN=SEU_TOKEN
+#  WHATSAPP_TEMPLATE_NAME=packid_encomenda_chegou
+#  WHATSAPP_LANGUAGE=pt_BR
