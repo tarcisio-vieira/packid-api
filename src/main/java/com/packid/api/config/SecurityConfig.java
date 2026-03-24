@@ -22,16 +22,25 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
-                        .requestMatchers("/health", "/public/**").permitAll()
-                        .requestMatchers("/me").authenticated()
-                        .anyRequest().authenticated()
+                        .requestMatchers(
+                                "/**",
+                                "/index.html",
+                                "/favicon.ico",
+                                "/assets/**",
+                                "/manifest.webmanifest",
+                                "/robots.txt"
+                        ).permitAll()
+                        .requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
+                        .requestMatchers("/actuator/health", "/health", "/public/**").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().permitAll()
                 )
                 .oauth2Login(oauth -> oauth
                         .defaultSuccessUrl(frontendUrl, true)
                 )
                 .logout(logout -> logout
-                        .logoutSuccessUrl(frontendUrl).permitAll()
+                        .logoutSuccessUrl(frontendUrl)
+                        .permitAll()
                 );
 
         return http.build();

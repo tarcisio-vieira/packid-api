@@ -28,4 +28,6 @@ public interface PersonRepository extends JpaRepository<Person, UUID> {
 
     Optional<Person> findByTenantIdAndDocumentAndDeletedFalse(UUID tenantId, String document);
     Optional<Person> findByTenantIdAndEmailAndDeletedFalse(UUID tenantId, String email);
+
+    Optional<Person> findFirstByTenantIdAndFullNameAndDeletedFalse(UUID tenantId, String fullName);
 }

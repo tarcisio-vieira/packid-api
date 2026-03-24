@@ -9,6 +9,8 @@ import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.PackId;
 import com.packid.api.domain.model.Person;
 import com.packid.api.domain.model.ResidentialUnit;
+import com.packid.api.domain.model.Condominium;
+import com.packid.api.domain.repository.CondominiumRepository;
 import com.packid.api.domain.repository.AppUserRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
@@ -35,18 +37,21 @@ public class PackIdService {
     private final ResidentialUnitRepository residentialUnitRepository;
     private final PersonRepository personRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final CondominiumRepository condominiumRepository;
 
     public PackIdService(
             PackIdRepository repository,
             AppUserRepository appUserRepository,
             ResidentialUnitRepository residentialUnitRepository,
             PersonRepository personRepository,
+            CondominiumRepository condominiumRepository,
             ApplicationEventPublisher eventPublisher
     ) {
         this.repository = repository;
         this.appUserRepository = appUserRepository;
         this.residentialUnitRepository = residentialUnitRepository;
         this.personRepository = personRepository;
+        this.condominiumRepository = condominiumRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -163,8 +168,11 @@ public class PackIdService {
         AppUser appUser = resolveAppUser(email, subject);
         UUID tenantId = appUser.getTenantId();
 
-        ResidentialUnit unit = validateResidentialUnit(tenantId, req.residentialUnitId());
-        Person resident = validateResidentPerson(tenantId, req.residentPersonId());
+        String apartment = req.apartment().trim();
+        String packageCode = req.packageCode().trim();
+
+        ResidentialUnit unit = resolveOrCreateResidentialUnit(tenantId, apartment);
+        Person resident = resolveOrCreateSymbolicResident(tenantId);
 
         PackId p = new PackId();
         p.setTenantId(tenantId);
@@ -173,8 +181,9 @@ public class PackIdService {
         p.setRegisteredByUserId(appUser.getId());
 
         p.setPackageType(PackageType.PACKAGE);
-        p.setPackageCode(req.packageCode().trim());
-        p.setLabelPackageCode(req.packageCode().trim());
+        p.setPackageCode(packageCode);
+        p.setLabelPackageCode(packageCode);
+        p.setObservations("x ");
 
         if (email != null && !email.isBlank()) {
             p.setCreatedBy(email);
@@ -189,7 +198,7 @@ public class PackIdService {
         } catch (DataIntegrityViolationException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Não foi possível salvar o pacote. Verifique unidade e morador vinculados ao tenant."
+                    "Não foi possível salvar o pacote."
             );
         }
     }
@@ -300,11 +309,76 @@ public class PackIdService {
                 .map(r -> new PackIdRecentResponse(
                         r.getId(),
                         r.getApartment(),
+                        r.getResidentFullName(),
                         r.getPackageCode(),
                         r.getLabelPackageCode(),
+                        r.getObservations(),
                         r.getArrivedAt(),
                         r.getCreatedBy()
                 ))
                 .toList();
+    }
+
+    private static final String SYMBOLIC_RESIDENT_NAME = "***";
+
+    private ResidentialUnit resolveOrCreateResidentialUnit(UUID tenantId, String apartment) {
+        List<ResidentialUnit> units =
+                residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, apartment);
+
+        if (units.size() == 1) {
+            return units.get(0);
+        }
+
+        if (units.size() > 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Existe mais de uma unidade com o código '" + apartment + "' neste tenant. " +
+                            "Será necessário diferenciar por bloco."
+            );
+        }
+
+        Condominium condominium = resolveDefaultCondominium(tenantId);
+
+        ResidentialUnit unit = new ResidentialUnit();
+        unit.setTenantId(tenantId);
+        unit.setCondominiumId(condominium.getId());
+        unit.setCode(apartment);
+        unit.setName("Unidade criada automaticamente");
+        unit.setActive(true);
+
+        return residentialUnitRepository.save(unit);
+    }
+
+    private Condominium resolveDefaultCondominium(UUID tenantId) {
+        List<Condominium> condominiums = condominiumRepository.findAllByTenantIdAndDeletedFalse(tenantId);
+
+        if (condominiums.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Nenhum condomínio encontrado para o tenant"
+            );
+        }
+
+        if (condominiums.size() > 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Há mais de um condomínio para este tenant. " +
+                            "Para cadastro automático, será preciso informar bloco/condomínio."
+            );
+        }
+
+        return condominiums.get(0);
+    }
+
+    private Person resolveOrCreateSymbolicResident(UUID tenantId) {
+        return personRepository
+                .findFirstByTenantIdAndFullNameAndDeletedFalse(tenantId, SYMBOLIC_RESIDENT_NAME)
+                .orElseGet(() -> {
+                    Person person = new Person();
+                    person.setTenantId(tenantId);
+                    person.setFullName(SYMBOLIC_RESIDENT_NAME);
+                    person.setPersonType(Person.PersonType.RESIDENT);
+                    return personRepository.save(person);
+                });
     }
 }

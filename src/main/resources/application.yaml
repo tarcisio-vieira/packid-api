@@ -33,8 +33,6 @@ logging:
   level:
     root: INFO
 
-app:
-  frontend-url: ${FRONTEND_URL}
 
 whatsapp:
   enabled: ${WHATSAPP_ENABLED:true}

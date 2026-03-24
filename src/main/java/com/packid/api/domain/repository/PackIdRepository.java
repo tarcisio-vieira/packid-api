@@ -39,41 +39,57 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
 
     // Busca simples por tracking / transportadora
     List<PackId> findAllByTenantIdAndTrackingCodeContainingIgnoreCase(UUID tenantId, String trackingCode);
+
     List<PackId> findAllByTenantIdAndCarrierContainingIgnoreCase(UUID tenantId, String carrier);
 
     Optional<PackId> findByTenantIdAndIdAndDeletedFalse(UUID tenantId, UUID id);
+
     List<PackId> findAllByTenantIdAndDeletedFalse(UUID tenantId);
 
     Optional<PackId> findByTenantIdAndPackageCodeHashAndDeletedFalse(UUID tenantId, String packageCodeHash);
 
     interface PackIdRecentRow {
         UUID getId();
+
         String getApartment();
-        String getPackageCode();        // código “interno” (se quiser manter)
-        String getLabelPackageCode();   // NOVO: digitado no front
+
+        String getResidentFullName();
+
+        String getPackageCode();
+
+        String getLabelPackageCode();
+
+        String getObservations();
+
         Instant getArrivedAt();
+
         String getCreatedBy();
     }
 
     @Query(value = """
-    SELECT
-      p.id AS id,
-      ru.code AS apartment,
-      p.package_code AS packageCode,
-      p.label_package_code AS labelPackageCode,
-      p.arrived_at AS arrivedAt,
-      p.created_by AS createdBy
-    FROM public.pack_id p
-    JOIN public.residential_unit ru
-      ON ru.tenant_id = p.tenant_id
-     AND ru.id = p.residential_unit_id
-    WHERE p.tenant_id = :tenantId
-      AND p.deleted = false
-      AND p.arrived_at >= COALESCE(CAST(:fromTs AS timestamp), '-infinity'::timestamp)
-      AND p.arrived_at <  COALESCE(CAST(:toTs   AS timestamp), 'infinity'::timestamp)
-    ORDER BY p.arrived_at DESC
-    LIMIT :limit
-    """, nativeQuery = true)
+            SELECT
+              p.id AS id,
+              ru.code AS apartment,
+              pe.full_name AS residentFullName,
+              p.package_code AS packageCode,
+              p.label_package_code AS labelPackageCode,
+              p.observations AS observations,
+              p.arrived_at AS arrivedAt,
+              p.created_by AS createdBy
+            FROM public.pack_id p
+            JOIN public.residential_unit ru
+              ON ru.tenant_id = p.tenant_id
+             AND ru.id = p.residential_unit_id
+            LEFT JOIN public.person pe
+              ON pe.tenant_id = p.tenant_id
+             AND pe.id = p.person_id
+            WHERE p.tenant_id = :tenantId
+              AND p.deleted = false
+              AND p.arrived_at >= COALESCE(CAST(:fromTs AS timestamp), '-infinity'::timestamp)
+              AND p.arrived_at <  COALESCE(CAST(:toTs   AS timestamp), 'infinity'::timestamp)
+            ORDER BY p.arrived_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
     List<PackIdRecentRow> findRecentByTenant(
             @Param("tenantId") UUID tenantId,
             @Param("limit") int limit,
