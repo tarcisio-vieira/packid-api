@@ -2,10 +2,8 @@ package com.packid.api.service;
 
 import com.packid.api.domain.model.PackId;
 import com.packid.api.domain.model.Person;
-import com.packid.api.domain.model.ResidentialUnit;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
-import com.packid.api.domain.repository.ResidentialUnitRepository;
 import com.packid.api.integration.whatsapp.WhatsAppClient;
 import com.packid.api.integration.whatsapp.WhatsAppPhoneNormalizer;
 import com.packid.api.integration.whatsapp.WhatsAppProperties;
@@ -13,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -25,7 +24,6 @@ public class PackIdWhatsAppNotifier {
 
     private final PackIdRepository packIdRepository;
     private final PersonRepository personRepository;
-    private final ResidentialUnitRepository residentialUnitRepository;
     private final WhatsAppClient whatsAppClient;
     private final WhatsAppPhoneNormalizer phoneNormalizer;
     private final WhatsAppProperties properties;
@@ -33,21 +31,19 @@ public class PackIdWhatsAppNotifier {
     public PackIdWhatsAppNotifier(
             PackIdRepository packIdRepository,
             PersonRepository personRepository,
-            ResidentialUnitRepository residentialUnitRepository,
             WhatsAppClient whatsAppClient,
             WhatsAppPhoneNormalizer phoneNormalizer,
             WhatsAppProperties properties
     ) {
         this.packIdRepository = packIdRepository;
         this.personRepository = personRepository;
-        this.residentialUnitRepository = residentialUnitRepository;
         this.whatsAppClient = whatsAppClient;
         this.phoneNormalizer = phoneNormalizer;
         this.properties = properties;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onPackIdCreated(PackIdCreatedEvent event) {
         if (!properties.isEnabled()) {
             log.info("WhatsApp desabilitado. PackId {} não notificará morador.", event.packIdId());
@@ -64,7 +60,12 @@ public class PackIdWhatsAppNotifier {
         }
 
         if (packId.getWhatsappSentAt() != null) {
-            log.info("PackId {} já possui envio WhatsApp registrado.", packId.getId());
+            log.info(
+                    "PackId {} já possui envio WhatsApp registrado. whatsappSentAt={}, whatsappMessageId={}",
+                    packId.getId(),
+                    packId.getWhatsappSentAt(),
+                    packId.getWhatsappMessageId()
+            );
             return;
         }
 
@@ -73,42 +74,59 @@ public class PackIdWhatsAppNotifier {
                 .orElse(null);
 
         if (person == null) {
-            log.warn("Pessoa {} não encontrada para PackId {}.", packId.getPersonId(), packId.getId());
+            log.warn(
+                    "Pessoa {} não encontrada para PackId {}.",
+                    packId.getPersonId(),
+                    packId.getId()
+            );
             return;
         }
 
-        String normalizedPhone = phoneNormalizer.normalizeBrazil(person.getPhone());
+        String originalPhone = person.getPhone();
+        String normalizedPhone = phoneNormalizer.normalizeBrazil(originalPhone);
+
+        log.info(
+                "Preparando envio WhatsApp. packId={}, tenantId={}, personId={}, personName='{}', telefoneOriginal='{}', telefoneNormalizado='{}'",
+                packId.getId(),
+                packId.getTenantId(),
+                person.getId(),
+                person.getFullName(),
+                originalPhone,
+                normalizedPhone
+        );
+
         if (normalizedPhone == null) {
-            log.warn("Pessoa {} sem telefone válido para WhatsApp. Telefone original: {}",
-                    person.getId(), person.getPhone());
+            log.warn(
+                    "Pessoa {} sem telefone válido para WhatsApp. Telefone original: {}",
+                    person.getId(),
+                    originalPhone
+            );
             return;
         }
-
-        ResidentialUnit unit = residentialUnitRepository
-                .findByTenantIdAndIdAndDeletedFalse(packId.getTenantId(), packId.getResidentialUnitId())
-                .orElse(null);
-
-        String apartment = (unit != null) ? unit.getCode() : "-";
-
-        String packageCode = packId.getLabelPackageCode() != null && !packId.getLabelPackageCode().isBlank()
-                ? packId.getLabelPackageCode()
-                : packId.getPackageCode();
 
         try {
-            String messageId = whatsAppClient.sendArrivalTemplate(
-                    normalizedPhone,
-                    person.getFullName(),
-                    apartment,
-                    packageCode
-            );
+            String messageId = whatsAppClient.sendArrivalTemplate(normalizedPhone);
 
             packId.setWhatsappMessageId(messageId);
             packId.setWhatsappSentAt(LocalDateTime.now());
             packIdRepository.save(packId);
 
-            log.info("WhatsApp enviado com sucesso para PackId {}. messageId={}", packId.getId(), messageId);
+            log.info(
+                    "WhatsApp aceito pela Meta com sucesso. packId={}, personId={}, telefoneEnviado='{}', messageId={}",
+                    packId.getId(),
+                    person.getId(),
+                    normalizedPhone,
+                    messageId
+            );
         } catch (Exception ex) {
-            log.error("Erro ao enviar WhatsApp do PackId {}: {}", packId.getId(), ex.getMessage(), ex);
+            log.error(
+                    "Erro ao enviar WhatsApp do PackId {} para personId {} no telefone '{}': {}",
+                    packId.getId(),
+                    person.getId(),
+                    normalizedPhone,
+                    ex.getMessage(),
+                    ex
+            );
         }
     }
 }

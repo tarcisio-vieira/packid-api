@@ -1,0 +1,15 @@
+services:
+  packid-postgres:
+    image: postgres:15
+    container_name: packid-postgres
+    environment:
+      POSTGRES_USER: packid_dev
+      POSTGRES_PASSWORD: packid_dev
+      POSTGRES_DB: packid_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - packid_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  packid_postgres_data:

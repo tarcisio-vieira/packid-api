@@ -1,6 +1,10 @@
 package com.packid.api.integration.whatsapp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -12,21 +16,31 @@ import java.util.List;
 @Service
 public class WhatsAppClient {
 
+    private static final Logger log = LoggerFactory.getLogger(WhatsAppClient.class);
+
     private final RestClient restClient;
     private final WhatsAppProperties properties;
+    private final ObjectMapper objectMapper;
 
-    public WhatsAppClient(WhatsAppProperties properties) {
+    public WhatsAppClient(WhatsAppProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
+        this.objectMapper = objectMapper;
         this.restClient = RestClient.builder()
                 .baseUrl("https://graph.facebook.com")
                 .build();
     }
 
-    public String sendArrivalTemplate(String toPhone,
-                                      String residentName,
-                                      String apartment,
-                                      String packageCode) {
+    public String sendArrivalTemplate(String toPhone) {
         validateConfiguration();
+
+        log.info(
+                "Enviando requisição para WhatsApp API. toPhone='{}', phoneNumberId='{}', template='{}', language='{}', apiVersion='{}'",
+                toPhone,
+                properties.getPhoneNumberId(),
+                properties.getTemplateName(),
+                properties.getLanguage(),
+                properties.getApiVersion()
+        );
 
         SendTemplateRequest request = new SendTemplateRequest(
                 "whatsapp",
@@ -35,34 +49,45 @@ public class WhatsAppClient {
                 new Template(
                         properties.getTemplateName(),
                         new Language(properties.getLanguage()),
-                        List.of(
-                                new Component(
-                                        "body",
-                                        List.of(
-                                                new Parameter("text", safe(residentName)),
-                                                new Parameter("text", safe(apartment)),
-                                                new Parameter("text", safe(packageCode))
-                                        )
-                                )
-                        )
+                        null
                 )
         );
 
-        SendTemplateResponse response = restClient.post()
+        String responseBody = restClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .pathSegment(properties.getApiVersion(), properties.getPhoneNumberId(), "messages")
                         .build())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getAccessToken())
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
-                .body(SendTemplateResponse.class);
+                .body(String.class);
 
-        if (response == null || response.messages() == null || response.messages().isEmpty()) {
-            throw new IllegalStateException("Resposta vazia ao enviar mensagem WhatsApp");
+        log.info("Resposta bruta WhatsApp API para toPhone='{}': {}", toPhone, responseBody);
+
+        try {
+            SendTemplateResponse response = objectMapper.readValue(responseBody, SendTemplateResponse.class);
+
+            if (response == null || response.messages() == null || response.messages().isEmpty()) {
+                throw new IllegalStateException("Resposta vazia ao enviar mensagem WhatsApp. Body: " + responseBody);
+            }
+
+            String messageId = response.messages().get(0).id();
+
+            log.info(
+                    "Resposta interpretada com sucesso da WhatsApp API. toPhone='{}', messageId='{}'",
+                    toPhone,
+                    messageId
+            );
+
+            return messageId;
+        } catch (Exception ex) {
+            throw new IllegalStateException(
+                    "Não foi possível interpretar a resposta do WhatsApp. Body: " + responseBody,
+                    ex
+            );
         }
-
-        return response.messages().get(0).id();
     }
 
     private void validateConfiguration() {
@@ -83,10 +108,6 @@ public class WhatsAppClient {
         }
     }
 
-    private String safe(String value) {
-        return StringUtils.hasText(value) ? value.trim() : "-";
-    }
-
     private record SendTemplateRequest(
             String messaging_product,
             String to,
@@ -94,6 +115,7 @@ public class WhatsAppClient {
             Template template
     ) {}
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record Template(
             String name,
             Language language,
