@@ -51,6 +51,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
     interface PackIdRecentRow {
         UUID getId();
 
+        String getBookPage();
+
         String getBlock();
 
         String getApartment();
@@ -71,8 +73,20 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
     @Query(value = """
             SELECT
               p.id AS id,
-              p.building_block AS block,
-              ru.code AS apartment,
+              COALESCE(
+                p.book_page,
+                CASE WHEN p.building_block ~ '^[0-9]{3}$' THEN p.building_block ELSE NULL END
+              ) AS bookPage,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.building_block
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 1 FOR 1)
+                ELSE p.building_block
+              END AS block,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.apartment
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 2)
+                ELSE ru.code
+              END AS apartment,
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,
               p.label_package_code AS labelPackageCode,
@@ -102,8 +116,20 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
     @Query(value = """
             SELECT
               p.id AS id,
-              p.building_block AS block,
-              ru.code AS apartment,
+              COALESCE(
+                p.book_page,
+                CASE WHEN p.building_block ~ '^[0-9]{3}$' THEN p.building_block ELSE NULL END
+              ) AS bookPage,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.building_block
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 1 FOR 1)
+                ELSE p.building_block
+              END AS block,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.apartment
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 2)
+                ELSE ru.code
+              END AS apartment,
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,
               p.label_package_code AS labelPackageCode,
@@ -119,11 +145,21 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
              AND pe.id = p.person_id
             WHERE p.tenant_id = :tenantId
               AND p.deleted = false
-              AND LOWER(TRIM(ru.code)) = LOWER(TRIM(:apartment))
               AND (
-                    LOWER(TRIM(COALESCE(p.building_block, ''))) = LOWER(TRIM(:block))
+                    (
+                        LOWER(TRIM(COALESCE(p.building_block, ''))) = LOWER(TRIM(:block))
+                        AND LOWER(TRIM(COALESCE(p.apartment, ''))) = LOWER(TRIM(:apartment))
+                    )
                     OR (
-                        p.building_block IS NULL
+                        p.apartment IS NULL
+                        AND p.building_block ~ '^[0-9]{3}$'
+                        AND ru.code ~ '^[1-4][0-9]{3,4}$'
+                        AND SUBSTRING(ru.code FROM 1 FOR 1) = TRIM(:block)
+                        AND SUBSTRING(ru.code FROM 2) = TRIM(:apartment)
+                    )
+                    OR (
+                        p.apartment IS NULL
+                        AND p.building_block IS NULL
                         AND EXISTS (
                             SELECT 1
                             FROM public.registry_entry re

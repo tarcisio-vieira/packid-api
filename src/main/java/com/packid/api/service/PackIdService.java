@@ -75,6 +75,9 @@ public class PackIdService {
         p.setPackageType(req.packageType());
         p.setPackageCode(req.packageCode());
         p.setLabelPackageCode(req.packageCode());
+        p.setBookPage(cleanOptional(req.bookPage()));
+        p.setBuildingBlock(cleanOptional(req.buildingBlock()));
+        p.setApartment(cleanOptional(req.apartment()));
         p.setCarrier(req.carrier());
         p.setTrackingCode(req.trackingCode());
         p.setDescription(req.description());
@@ -125,6 +128,9 @@ public class PackIdService {
             p.setPackageCode(req.packageCode());
             p.setLabelPackageCode(req.packageCode());
         }
+        if (req.bookPage() != null) p.setBookPage(cleanOptional(req.bookPage()));
+        if (req.buildingBlock() != null) p.setBuildingBlock(cleanOptional(req.buildingBlock()));
+        if (req.apartment() != null) p.setApartment(cleanOptional(req.apartment()));
         if (req.carrier() != null) p.setCarrier(req.carrier());
         if (req.trackingCode() != null) p.setTrackingCode(req.trackingCode());
         if (req.description() != null) p.setDescription(req.description());
@@ -174,10 +180,13 @@ public class PackIdService {
         UUID tenantId = appUser.getTenantId();
 
         String apartment = req.apartment().trim();
-        String block = cleanOptional(req.block());
+        String block = req.block().trim();
+        String bookPage = req.bookPage().trim();
         String packageCode = req.packageCode().trim();
 
-        ResidentialUnit unit = resolveOrCreateResidentialUnit(tenantId, apartment);
+        validateLabelUnit(bookPage, block, apartment);
+
+        ResidentialUnit unit = resolveOrCreateResidentialUnit(tenantId, block, apartment);
         Person resident = resolveResidentForUnit(tenantId, block, apartment);
 
         PackId p = new PackId();
@@ -189,7 +198,9 @@ public class PackIdService {
         p.setPackageType(PackageType.PACKAGE);
         p.setPackageCode(packageCode);
         p.setLabelPackageCode(packageCode);
+        p.setBookPage(bookPage);
         p.setBuildingBlock(block);
+        p.setApartment(apartment);
         p.setObservations("x ");
 
         if (email != null && !email.isBlank()) {
@@ -238,6 +249,9 @@ public class PackIdService {
 
                 p.getPackageCode(),
                 p.getPackageCodeHash(),
+                p.getBookPage(),
+                p.getBuildingBlock(),
+                p.getApartment(),
 
                 p.getCarrier(),
                 p.getTrackingCode(),
@@ -315,6 +329,7 @@ public class PackIdService {
         return repository.findRecentByTenant(tenantId, safeLimit, fromTs, toTs).stream()
                 .map(r -> new PackIdRecentResponse(
                         r.getId(),
+                        r.getBookPage(),
                         r.getBlock(),
                         r.getApartment(),
                         r.getResidentFullName(),
@@ -331,6 +346,23 @@ public class PackIdService {
         if (value == null) return null;
         String cleaned = value.trim();
         return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private void validateLabelUnit(String bookPage, String block, String apartment) {
+        if (!bookPage.matches("(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Página inválida. Informe de 001 até 999.");
+        }
+
+        if (!block.matches("[1-4]")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bloco inválido. Informe um bloco de 1 a 4.");
+        }
+
+        if (!apartment.matches("(?:[1-9][0-9]{2}|1[0-2][0-9]{2})")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Apartamento inválido. O número deve representar um apartamento do 1º ao 12º andar."
+            );
+        }
     }
 
     private Person resolveResidentForUnit(UUID tenantId, String block, String apartment) {
@@ -357,9 +389,10 @@ public class PackIdService {
 
     private static final String SYMBOLIC_RESIDENT_NAME = "***";
 
-    private ResidentialUnit resolveOrCreateResidentialUnit(UUID tenantId, String apartment) {
+    private ResidentialUnit resolveOrCreateResidentialUnit(UUID tenantId, String block, String apartment) {
+        String unitCode = block + apartment;
         List<ResidentialUnit> units =
-                residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, apartment);
+                residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, unitCode);
 
         if (units.size() == 1) {
             return units.get(0);
@@ -368,8 +401,7 @@ public class PackIdService {
         if (units.size() > 1) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Existe mais de uma unidade com o código '" + apartment + "' neste tenant. " +
-                            "Será necessário diferenciar por bloco."
+                    "Existe mais de uma unidade com o código '" + unitCode + "' neste tenant."
             );
         }
 
@@ -378,7 +410,7 @@ public class PackIdService {
         ResidentialUnit unit = new ResidentialUnit();
         unit.setTenantId(tenantId);
         unit.setCondominiumId(condominium.getId());
-        unit.setCode(apartment);
+        unit.setCode(unitCode);
         unit.setName("Unidade criada automaticamente");
         unit.setActive(true);
 

@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record PackIdRecentResponse(
         UUID id,
+        String bookPage,
         String block,
         String apartment,
         String residentFullName,

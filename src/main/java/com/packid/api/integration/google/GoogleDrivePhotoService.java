@@ -23,7 +23,7 @@ import java.util.UUID;
 public class GoogleDrivePhotoService {
 
     private static final String DRIVE_API = "https://www.googleapis.com";
-    private static final String PHOTO_FOLDER_NAME = "PackID - Fotos";
+    private static final String ROOT_FOLDER_NAME = "VSGI-Condominium";
     private static final String FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
     private final RestClient restClient;
@@ -43,10 +43,12 @@ public class GoogleDrivePhotoService {
             String entryType,
             String originalFilename,
             String mimeType,
-            byte[] bytes
+            byte[] bytes,
+            String block,
+            String apartment
     ) {
         String accessToken = accessToken(authorizedClient);
-        String folderId = findOrCreatePhotoFolder(accessToken);
+        String folderId = findOrCreatePhotoFolder(accessToken, block, apartment);
 
         String safeName = buildFileName(registryEntryId, originalFilename, mimeType);
         Map<String, Object> metadata = Map.of(
@@ -148,24 +150,62 @@ public class GoogleDrivePhotoService {
         }
     }
 
-    private String findOrCreatePhotoFolder(String accessToken) {
+    private String findOrCreatePhotoFolder(String accessToken, String block, String apartment) {
+        String rootFolderId = findOrCreateFolder(
+                accessToken,
+                null,
+                ROOT_FOLDER_NAME,
+                "vsgiFolder",
+                "condominium"
+        );
+
+        String blockValue = folderValue(block, "Unassigned");
+        String blockFolderId = findOrCreateFolder(
+                accessToken,
+                rootFolderId,
+                "Block " + blockValue,
+                "vsgiBlock",
+                blockValue
+        );
+
+        String apartmentValue = folderValue(apartment, "Unassigned");
+        return findOrCreateFolder(
+                accessToken,
+                blockFolderId,
+                "Apartment " + apartmentValue,
+                "vsgiApartment",
+                apartmentValue
+        );
+    }
+
+    private String findOrCreateFolder(
+            String accessToken,
+            String parentFolderId,
+            String folderName,
+            String appPropertyKey,
+            String appPropertyValue
+    ) {
         String q = "mimeType='" + FOLDER_MIME_TYPE + "' and trashed=false " +
-                "and appProperties has { key='packidFolder' and value='photos' }";
+                "and appProperties has { key='" + escapeDriveQuery(appPropertyKey) +
+                "' and value='" + escapeDriveQuery(appPropertyValue) + "' }";
+
+        if (parentFolderId != null && !parentFolderId.isBlank()) {
+            q += " and '" + escapeDriveQuery(parentFolderId) + "' in parents";
+        }
+        final String query = q;
 
         try {
             DriveFileList list = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/drive/v3/files")
-                            // O valor de q contém chaves da sintaxe do Google Drive
-                            // (appProperties has { ... }). Se ele for passado diretamente
-                            // ao queryParam, o Spring tenta interpretar as chaves como
-                            // variáveis de URI. Usamos {q} como template e fornecemos o
-                            // valor na chamada build(q), evitando a expansão indevida.
+                            // A sintaxe de busca do Drive usa chaves em appProperties.
+                            // O valor é fornecido como variável para impedir que o Spring
+                            // interprete essas chaves como placeholders da URI.
                             .queryParam("q", "{q}")
                             .queryParam("spaces", "drive")
                             .queryParam("pageSize", 10)
                             .queryParam("fields", "files(id,name,mimeType)")
-                            .build(q))
+                            .build(query))
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                     .retrieve()
                     .body(DriveFileList.class);
@@ -174,11 +214,21 @@ public class GoogleDrivePhotoService {
                 return list.files().get(0).id();
             }
 
-            Map<String, Object> metadata = Map.of(
-                    "name", PHOTO_FOLDER_NAME,
-                    "mimeType", FOLDER_MIME_TYPE,
-                    "appProperties", Map.of("packidFolder", "photos")
-            );
+            Map<String, Object> metadata;
+            if (parentFolderId == null || parentFolderId.isBlank()) {
+                metadata = Map.of(
+                        "name", folderName,
+                        "mimeType", FOLDER_MIME_TYPE,
+                        "appProperties", Map.of(appPropertyKey, appPropertyValue)
+                );
+            } else {
+                metadata = Map.of(
+                        "name", folderName,
+                        "mimeType", FOLDER_MIME_TYPE,
+                        "parents", List.of(parentFolderId),
+                        "appProperties", Map.of(appPropertyKey, appPropertyValue)
+                );
+            }
 
             DriveFile folder = restClient.post()
                     .uri(uriBuilder -> uriBuilder
@@ -199,6 +249,20 @@ public class GoogleDrivePhotoService {
         } catch (RestClientResponseException ex) {
             throw driveException("Não foi possível acessar a pasta de fotos no Google Drive.", ex);
         }
+    }
+
+    private String folderValue(String value, String fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        String cleaned = value.trim()
+                .replace('/', '-')
+                .replace('\\', '-')
+                .replaceAll("[\\r\\n\\t]", " ")
+                .replaceAll("\\s+", " ");
+        return cleaned.isBlank() ? fallback : cleaned;
+    }
+
+    private String escapeDriveQuery(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("'", "\\'");
     }
 
     private byte[] multipartRelatedBody(

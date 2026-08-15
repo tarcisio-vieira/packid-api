@@ -68,7 +68,9 @@ public class RegistryPhotoService {
                 entry.getEntryType().name(),
                 file.getOriginalFilename(),
                 file.getContentType(),
-                bytes
+                bytes,
+                entry.getBlock(),
+                entry.getApartment()
         );
 
         entry.setPhotoDriveFileId(uploaded.id());

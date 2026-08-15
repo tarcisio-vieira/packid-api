@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0015-packid-unit-address
+      author: packid
+      changes:
+        - addColumn:
+            tableName: pack_id
+            columns:
+              - column:
+                  name: book_page
+                  type: varchar(3)
+              - column:
+                  name: apartment
+                  type: varchar(10)
+
+        # Corrige registros gerados pela dinâmica antiga:
+        # building_block guardava a página (ex.: 099) e residential_unit.code
+        # guardava bloco+apartamento (ex.: 2608).
+        - sql:
+            splitStatements: false
+            sql: |
+              UPDATE public.pack_id p
+                 SET book_page = p.building_block,
+                     building_block = SUBSTRING(ru.code FROM 1 FOR 1),
+                     apartment = SUBSTRING(ru.code FROM 2)
+                FROM public.residential_unit ru
+               WHERE ru.tenant_id = p.tenant_id
+                 AND ru.id = p.residential_unit_id
+                 AND p.apartment IS NULL
+                 AND p.building_block ~ '^[0-9]{3}$'
+                 AND ru.code ~ '^[1-4][0-9]{3,4}$';
+
+        - createIndex:
+            tableName: pack_id
+            indexName: ix_pack_id_tenant_block_apartment
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: building_block
+              - column:
+                  name: apartment

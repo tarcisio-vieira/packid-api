@@ -84,6 +84,7 @@ public class RegistryEntryService {
                 packIdRepository.findByUnit(appUser.getTenantId(), cleanedBlock, cleanedApartment, 200).stream()
                         .map(r -> new PackIdRecentResponse(
                                 r.getId(),
+                                r.getBookPage(),
                                 r.getBlock(),
                                 r.getApartment(),
                                 r.getResidentFullName(),

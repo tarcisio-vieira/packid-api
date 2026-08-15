@@ -16,6 +16,9 @@ public record PackIdResponse(
 
         String packageCode,
         String packageCodeHash,
+        String bookPage,
+        String buildingBlock,
+        String apartment,
 
         String carrier,
         String trackingCode,

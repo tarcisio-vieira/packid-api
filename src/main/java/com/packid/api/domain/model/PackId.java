@@ -70,8 +70,14 @@ public class PackId extends AuditableEntity {
     @Column(name = "label_package_code", columnDefinition = "text")
     private String labelPackageCode;
 
+    @Column(name = "book_page", length = 3)
+    private String bookPage;
+
     @Column(name = "building_block", length = 30)
     private String buildingBlock;
+
+    @Column(name = "apartment", length = 10)
+    private String apartment;
 
     @Column(name = "carrier", length = 80)
     private String carrier;

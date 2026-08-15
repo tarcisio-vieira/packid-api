@@ -13,6 +13,9 @@ public record PackIdUpdateRequest(
         PackageType packageType,
 
         String packageCode,
+        String bookPage,
+        String buildingBlock,
+        String apartment,
         String carrier,
         String trackingCode,
         String description,
