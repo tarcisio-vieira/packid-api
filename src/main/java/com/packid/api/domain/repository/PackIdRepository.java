@@ -99,4 +99,51 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
             @Param("fromTs") java.sql.Timestamp fromTs,
             @Param("toTs") java.sql.Timestamp toTs
     );
+    @Query(value = """
+            SELECT
+              p.id AS id,
+              p.building_block AS block,
+              ru.code AS apartment,
+              pe.full_name AS residentFullName,
+              p.package_code AS packageCode,
+              p.label_package_code AS labelPackageCode,
+              p.observations AS observations,
+              p.arrived_at AS arrivedAt,
+              p.created_by AS createdBy
+            FROM public.pack_id p
+            JOIN public.residential_unit ru
+              ON ru.tenant_id = p.tenant_id
+             AND ru.id = p.residential_unit_id
+            LEFT JOIN public.person pe
+              ON pe.tenant_id = p.tenant_id
+             AND pe.id = p.person_id
+            WHERE p.tenant_id = :tenantId
+              AND p.deleted = false
+              AND LOWER(TRIM(ru.code)) = LOWER(TRIM(:apartment))
+              AND (
+                    LOWER(TRIM(COALESCE(p.building_block, ''))) = LOWER(TRIM(:block))
+                    OR (
+                        p.building_block IS NULL
+                        AND EXISTS (
+                            SELECT 1
+                            FROM public.registry_entry re
+                            WHERE re.tenant_id = p.tenant_id
+                              AND re.person_id = p.person_id
+                              AND re.entry_type = 'RESIDENT'
+                              AND re.deleted = false
+                              AND LOWER(TRIM(COALESCE(re.block, ''))) = LOWER(TRIM(:block))
+                              AND LOWER(TRIM(COALESCE(re.apartment, ''))) = LOWER(TRIM(:apartment))
+                        )
+                    )
+                  )
+            ORDER BY p.arrived_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<PackIdRecentRow> findByUnit(
+            @Param("tenantId") UUID tenantId,
+            @Param("block") String block,
+            @Param("apartment") String apartment,
+            @Param("limit") int limit
+    );
+
 }

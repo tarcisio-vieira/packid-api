@@ -12,8 +12,14 @@ import java.util.UUID;
 @Repository
 public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UUID> {
     Optional<RegistryEntry> findByTenantIdAndIdAndDeletedFalse(UUID tenantId, UUID id);
+    Optional<RegistryEntry> findByTenantIdAndEntryTypeAndDocumentIgnoreCaseAndDeletedFalse(
+            UUID tenantId, EntryType entryType, String document);
     List<RegistryEntry> findAllByTenantIdAndDeletedFalseOrderByNameAsc(UUID tenantId);
     List<RegistryEntry> findAllByTenantIdAndEntryTypeAndDeletedFalseOrderByNameAsc(UUID tenantId, EntryType entryType);
+
+    List<RegistryEntry> findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByNameAsc(
+            UUID tenantId, String block, String apartment);
+
 
     List<RegistryEntry> findAllByTenantIdAndEntryTypeAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
             UUID tenantId, EntryType entryType, String block, String apartment);

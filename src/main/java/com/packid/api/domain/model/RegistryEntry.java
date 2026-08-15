@@ -102,6 +102,7 @@ public class RegistryEntry extends AuditableEntity {
     public enum EntryType {
         RESIDENT,
         DELIVERY_PERSON,
+        VISITOR,
         BICYCLE,
         PET,
         VEHICLE

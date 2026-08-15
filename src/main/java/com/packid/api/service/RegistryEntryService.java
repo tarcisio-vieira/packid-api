@@ -1,12 +1,15 @@
 package com.packid.api.service;
 
+import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.registry.dto.RegistryEntryRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
+import com.packid.api.controller.registry.dto.UnitRegistrySummaryResponse;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
 import com.packid.api.domain.model.Person;
 import com.packid.api.domain.repository.RegistryEntryRepository;
+import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
@@ -24,15 +27,24 @@ public class RegistryEntryService {
     private final RegistryEntryRepository repository;
     private final PersonRepository personRepository;
     private final AuthenticatedUserService authenticatedUserService;
+    private final VisitorVisitService visitorVisitService;
+    private final DeliveryRecordService deliveryRecordService;
+    private final PackIdRepository packIdRepository;
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
             PersonRepository personRepository,
-            AuthenticatedUserService authenticatedUserService
+            AuthenticatedUserService authenticatedUserService,
+            VisitorVisitService visitorVisitService,
+            DeliveryRecordService deliveryRecordService,
+            PackIdRepository packIdRepository
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
         this.authenticatedUserService = authenticatedUserService;
+        this.visitorVisitService = visitorVisitService;
+        this.deliveryRecordService = deliveryRecordService;
+        this.packIdRepository = packIdRepository;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -51,15 +63,57 @@ public class RegistryEntryService {
         return toResponse(entry, appUser);
     }
 
+    public UnitRegistrySummaryResponse getUnitSummary(OidcUser oidcUser, String block, String apartment) {
+        AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        String cleanedBlock = cleanRequiredUnit(block, "Bloco é obrigatório.");
+        String cleanedApartment = cleanRequiredUnit(apartment, "Apartamento é obrigatório.");
+
+        List<RegistryEntry> unitEntries = repository
+                .findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByNameAsc(
+                        appUser.getTenantId(), cleanedBlock, cleanedApartment);
+
+        return new UnitRegistrySummaryResponse(
+                cleanedBlock,
+                cleanedApartment,
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.RESIDENT).map(e -> toResponse(e, appUser)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.BICYCLE).map(e -> toResponse(e, appUser)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.VEHICLE).map(e -> toResponse(e, appUser)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.PET).map(e -> toResponse(e, appUser)).toList(),
+                visitorVisitService.getByUnit(appUser, cleanedBlock, cleanedApartment),
+                deliveryRecordService.getByUnit(appUser, cleanedBlock, cleanedApartment),
+                packIdRepository.findByUnit(appUser.getTenantId(), cleanedBlock, cleanedApartment, 200).stream()
+                        .map(r -> new PackIdRecentResponse(
+                                r.getId(),
+                                r.getBlock(),
+                                r.getApartment(),
+                                r.getResidentFullName(),
+                                r.getPackageCode(),
+                                r.getLabelPackageCode(),
+                                r.getObservations(),
+                                r.getArrivedAt(),
+                                r.getCreatedBy()
+                        ))
+                        .toList()
+        );
+    }
+
     @Transactional
     public RegistryEntryResponse create(OidcUser oidcUser, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
 
-        RegistryEntry entry = new RegistryEntry();
-        entry.setTenantId(appUser.getTenantId());
+        RegistryEntry entry = findReusableAccessPerson(appUser, request);
+        boolean existing = entry != null;
+        if (!existing) {
+            entry = new RegistryEntry();
+            entry.setTenantId(appUser.getTenantId());
+            entry.setCreatedBy(actor(appUser));
+        }
+
         apply(entry, request);
         syncResidentPerson(appUser, entry);
-        entry.setCreatedBy(actor(appUser));
+        if (existing) {
+            entry.setUpdatedBy(actor(appUser));
+        }
 
         return toResponse(repository.save(entry), appUser);
     }
@@ -86,6 +140,17 @@ public class RegistryEntryService {
         entry.setDeletedAt(LocalDateTime.now());
         entry.setDeletedBy(actor(appUser));
         repository.save(entry);
+    }
+
+    private RegistryEntry findReusableAccessPerson(AppUser appUser, RegistryEntryRequest request) {
+        if (request.entryType() != EntryType.VISITOR && request.entryType() != EntryType.DELIVERY_PERSON) {
+            return null;
+        }
+        String document = clean(request.document());
+        if (document == null) return null;
+
+        return repository.findByTenantIdAndEntryTypeAndDocumentIgnoreCaseAndDeletedFalse(
+                appUser.getTenantId(), request.entryType(), document).orElse(null);
     }
 
     private void apply(RegistryEntry entry, RegistryEntryRequest request) {
@@ -223,6 +288,14 @@ public class RegistryEntryService {
             return appUser.getEmail().trim();
         }
         return "system";
+    }
+
+    private String cleanRequiredUnit(String value, String message) {
+        String cleaned = clean(value);
+        if (cleaned == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return cleaned;
     }
 
     private String cleanRequired(String value) {

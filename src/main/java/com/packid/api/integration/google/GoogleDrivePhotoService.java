@@ -156,6 +156,11 @@ public class GoogleDrivePhotoService {
             DriveFileList list = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/drive/v3/files")
+                            // O valor de q contém chaves da sintaxe do Google Drive
+                            // (appProperties has { ... }). Se ele for passado diretamente
+                            // ao queryParam, o Spring tenta interpretar as chaves como
+                            // variáveis de URI. Usamos {q} como template e fornecemos o
+                            // valor na chamada build(q), evitando a expansão indevida.
                             .queryParam("q", "{q}")
                             .queryParam("spaces", "drive")
                             .queryParam("pageSize", 10)

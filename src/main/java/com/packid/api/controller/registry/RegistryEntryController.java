@@ -2,6 +2,7 @@ package com.packid.api.controller.registry;
 
 import com.packid.api.controller.registry.dto.RegistryEntryRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
+import com.packid.api.controller.registry.dto.UnitRegistrySummaryResponse;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
 import com.packid.api.service.RegistryEntryService;
@@ -39,6 +40,16 @@ public class RegistryEntryController {
             @RequestParam(required = false) EntryType type
     ) {
         return ResponseEntity.ok(service.getAll(user, type));
+    }
+
+
+    @GetMapping("/unit-summary")
+    public ResponseEntity<UnitRegistrySummaryResponse> getUnitSummary(
+            @AuthenticationPrincipal OidcUser user,
+            @RequestParam String block,
+            @RequestParam String apartment
+    ) {
+        return ResponseEntity.ok(service.getUnitSummary(user, block, apartment));
     }
 
     @PostMapping
