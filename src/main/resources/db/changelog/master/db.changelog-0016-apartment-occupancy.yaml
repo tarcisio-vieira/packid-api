@@ -1,0 +1,173 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0016-apartment-occupancy
+      author: vsgi
+      changes:
+        - createTable:
+            tableName: apartment_occupancy
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: block
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: apartment
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: start_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: end_date
+                  type: date
+              - column:
+                  name: status
+                  type: varchar(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notes
+                  type: text
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+              - column:
+                  name: deleted_at
+                  type: timestamp
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: apartment_occupancy
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_apartment_occupancy_tenant
+            onDelete: RESTRICT
+        - addUniqueConstraint:
+            tableName: apartment_occupancy
+            columnNames: tenant_id,id
+            constraintName: uk_apartment_occupancy_tenant_id
+        - createIndex:
+            tableName: apartment_occupancy
+            indexName: idx_apartment_occupancy_unit
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: block
+              - column:
+                  name: apartment
+              - column:
+                  name: status
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: occupancy_id
+                  type: uuid
+        - addForeignKeyConstraint:
+            baseTableName: registry_entry
+            baseColumnNames: tenant_id,occupancy_id
+            referencedTableName: apartment_occupancy
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_registry_entry_occupancy_same_tenant
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_occupancy
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: occupancy_id
+        - createIndex:
+            tableName: pack_id
+            indexName: idx_pack_id_unit_arrived_at
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: building_block
+              - column:
+                  name: apartment
+              - column:
+                  name: arrived_at
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              INSERT INTO apartment_occupancy (
+                  id, tenant_id, block, apartment, start_date, status,
+                  created_at, created_by, deleted
+              )
+              SELECT
+                  gen_random_uuid(),
+                  re.tenant_id,
+                  TRIM(re.block),
+                  TRIM(re.apartment),
+                  COALESCE(MIN(re.created_at)::date, CURRENT_DATE),
+                  'ACTIVE',
+                  CURRENT_TIMESTAMP,
+                  'migration-0016',
+                  false
+              FROM registry_entry re
+              WHERE re.deleted = false
+                AND re.active = true
+                AND re.entry_type IN ('RESIDENT', 'BICYCLE', 'PET', 'VEHICLE')
+                AND NULLIF(TRIM(re.block), '') IS NOT NULL
+                AND NULLIF(TRIM(re.apartment), '') IS NOT NULL
+              GROUP BY re.tenant_id, TRIM(re.block), TRIM(re.apartment);
+
+              UPDATE registry_entry re
+                 SET occupancy_id = ao.id
+                FROM apartment_occupancy ao
+               WHERE re.tenant_id = ao.tenant_id
+                 AND LOWER(TRIM(re.block)) = LOWER(TRIM(ao.block))
+                 AND LOWER(TRIM(re.apartment)) = LOWER(TRIM(ao.apartment))
+                 AND re.deleted = false
+                 AND re.active = true
+                 AND re.entry_type IN ('RESIDENT', 'BICYCLE', 'PET', 'VEHICLE')
+                 AND ao.status = 'ACTIVE'
+                 AND ao.deleted = false;
+
+              CREATE UNIQUE INDEX IF NOT EXISTS uk_apartment_occupancy_active_unit
+                  ON apartment_occupancy (tenant_id, LOWER(TRIM(block)), LOWER(TRIM(apartment)))
+               WHERE status = 'ACTIVE' AND deleted = false;

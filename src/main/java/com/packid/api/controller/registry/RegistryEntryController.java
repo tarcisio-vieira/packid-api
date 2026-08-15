@@ -47,9 +47,10 @@ public class RegistryEntryController {
     public ResponseEntity<UnitRegistrySummaryResponse> getUnitSummary(
             @AuthenticationPrincipal OidcUser user,
             @RequestParam String block,
-            @RequestParam String apartment
+            @RequestParam String apartment,
+            @RequestParam(required = false) UUID occupancyId
     ) {
-        return ResponseEntity.ok(service.getUnitSummary(user, block, apartment));
+        return ResponseEntity.ok(service.getUnitSummary(user, block, apartment, occupancyId));
     }
 
     @PostMapping

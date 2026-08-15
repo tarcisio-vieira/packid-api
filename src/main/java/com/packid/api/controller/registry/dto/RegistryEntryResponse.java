@@ -8,6 +8,7 @@ import java.util.UUID;
 public record RegistryEntryResponse(
         UUID id,
         UUID personId,
+        UUID occupancyId,
         EntryType entryType,
         String name,
         String document,

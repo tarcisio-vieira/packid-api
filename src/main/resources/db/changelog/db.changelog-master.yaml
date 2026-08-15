@@ -30,3 +30,6 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0014-access-history.yaml
   - include:
       file: db/changelog/master/db.changelog-0015-packid-unit-address.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0016-apartment-occupancy.yaml

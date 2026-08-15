@@ -1,9 +1,11 @@
 package com.packid.api.service;
 
+import com.packid.api.controller.occupancy.dto.ApartmentOccupancyResponse;
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.registry.dto.RegistryEntryRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
 import com.packid.api.controller.registry.dto.UnitRegistrySummaryResponse;
+import com.packid.api.domain.model.ApartmentOccupancy;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
@@ -17,6 +19,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +33,7 @@ public class RegistryEntryService {
     private final VisitorVisitService visitorVisitService;
     private final DeliveryRecordService deliveryRecordService;
     private final PackIdRepository packIdRepository;
+    private final ApartmentOccupancyService occupancyService;
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
@@ -37,7 +41,8 @@ public class RegistryEntryService {
             AuthenticatedUserService authenticatedUserService,
             VisitorVisitService visitorVisitService,
             DeliveryRecordService deliveryRecordService,
-            PackIdRepository packIdRepository
+            PackIdRepository packIdRepository,
+            ApartmentOccupancyService occupancyService
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -45,6 +50,7 @@ public class RegistryEntryService {
         this.visitorVisitService = visitorVisitService;
         this.deliveryRecordService = deliveryRecordService;
         this.packIdRepository = packIdRepository;
+        this.occupancyService = occupancyService;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -63,25 +69,69 @@ public class RegistryEntryService {
         return toResponse(entry, appUser);
     }
 
-    public UnitRegistrySummaryResponse getUnitSummary(OidcUser oidcUser, String block, String apartment) {
+    public UnitRegistrySummaryResponse getUnitSummary(OidcUser oidcUser, String block, String apartment, UUID occupancyId) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         String cleanedBlock = cleanRequiredUnit(block, "Bloco é obrigatório.");
         String cleanedApartment = cleanRequiredUnit(apartment, "Apartamento é obrigatório.");
 
-        List<RegistryEntry> unitEntries = repository
-                .findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByNameAsc(
-                        appUser.getTenantId(), cleanedBlock, cleanedApartment);
+        List<ApartmentOccupancy> occupancies = occupancyService.listByUnit(appUser, cleanedBlock, cleanedApartment);
+        ApartmentOccupancy selectedOccupancy = null;
+
+        if (occupancyId != null) {
+            selectedOccupancy = occupancyService.findById(appUser, occupancyId);
+            if (!sameUnit(selectedOccupancy, cleanedBlock, cleanedApartment)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A ocupação informada não pertence a esta unidade.");
+            }
+        } else {
+            selectedOccupancy = occupancies.stream()
+                    .filter(item -> item.getStatus() == ApartmentOccupancy.Status.ACTIVE)
+                    .findFirst()
+                    .orElse(occupancies.isEmpty() ? null : occupancies.get(0));
+        }
+
+        List<RegistryEntry> unitEntries;
+        LocalDateTime from = null;
+        LocalDateTime to = null;
+
+        if (selectedOccupancy != null) {
+            unitEntries = repository.findAllByTenantIdAndOccupancyIdAndDeletedFalseOrderByNameAsc(
+                    appUser.getTenantId(), selectedOccupancy.getId());
+            if (selectedOccupancy.getStatus() == ApartmentOccupancy.Status.ACTIVE) {
+                unitEntries = unitEntries.stream().filter(item -> Boolean.TRUE.equals(item.getActive())).toList();
+            }
+            from = selectedOccupancy.getStartDate().atStartOfDay();
+            if (selectedOccupancy.getEndDate() != null) {
+                to = selectedOccupancy.getEndDate().plusDays(1).atStartOfDay();
+            }
+        } else {
+            unitEntries = repository.findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
+                    appUser.getTenantId(), cleanedBlock, cleanedApartment);
+        }
+
+        LocalDateTime finalFrom = from;
+        LocalDateTime finalTo = to;
+        ApartmentOccupancyResponse selectedResponse = occupancyService.toResponse(selectedOccupancy);
+        List<ApartmentOccupancyResponse> occupancyResponses = occupancies.stream().map(occupancyService::toResponse).toList();
 
         return new UnitRegistrySummaryResponse(
                 cleanedBlock,
                 cleanedApartment,
+                selectedResponse,
+                occupancyResponses,
                 unitEntries.stream().filter(e -> e.getEntryType() == EntryType.RESIDENT).map(e -> toResponse(e, appUser)).toList(),
                 unitEntries.stream().filter(e -> e.getEntryType() == EntryType.BICYCLE).map(e -> toResponse(e, appUser)).toList(),
                 unitEntries.stream().filter(e -> e.getEntryType() == EntryType.VEHICLE).map(e -> toResponse(e, appUser)).toList(),
                 unitEntries.stream().filter(e -> e.getEntryType() == EntryType.PET).map(e -> toResponse(e, appUser)).toList(),
-                visitorVisitService.getByUnit(appUser, cleanedBlock, cleanedApartment),
-                deliveryRecordService.getByUnit(appUser, cleanedBlock, cleanedApartment),
-                packIdRepository.findByUnit(appUser.getTenantId(), cleanedBlock, cleanedApartment, 200).stream()
+                visitorVisitService.getByUnit(appUser, cleanedBlock, cleanedApartment, finalFrom, finalTo),
+                deliveryRecordService.getByUnit(appUser, cleanedBlock, cleanedApartment, finalFrom, finalTo),
+                packIdRepository.findByUnit(
+                                appUser.getTenantId(),
+                                cleanedBlock,
+                                cleanedApartment,
+                                finalFrom == null ? null : Timestamp.valueOf(finalFrom),
+                                finalTo == null ? null : Timestamp.valueOf(finalTo),
+                                200
+                        ).stream()
                         .map(r -> new PackIdRecentResponse(
                                 r.getId(),
                                 r.getBookPage(),
@@ -98,6 +148,12 @@ public class RegistryEntryService {
         );
     }
 
+    private boolean sameUnit(ApartmentOccupancy occupancy, String block, String apartment) {
+        return occupancy != null
+                && occupancy.getBlock().trim().equalsIgnoreCase(block.trim())
+                && occupancy.getApartment().trim().equalsIgnoreCase(apartment.trim());
+    }
+
     @Transactional
     public RegistryEntryResponse create(OidcUser oidcUser, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
@@ -111,6 +167,7 @@ public class RegistryEntryService {
         }
 
         apply(entry, request);
+        syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
         if (existing) {
             entry.setUpdatedBy(actor(appUser));
@@ -126,6 +183,7 @@ public class RegistryEntryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
 
         apply(entry, request);
+        syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
         entry.setUpdatedBy(actor(appUser));
         return toResponse(repository.save(entry), appUser);
@@ -174,12 +232,37 @@ public class RegistryEntryService {
         entry.setNotes(clean(request.notes()));
         entry.setActive(request.active() == null ? Boolean.TRUE : request.active());
 
-        if (entry.getEntryType() == EntryType.RESIDENT
+        if ((entry.getEntryType() == EntryType.RESIDENT
+                || entry.getEntryType() == EntryType.BICYCLE
+                || entry.getEntryType() == EntryType.PET
+                || entry.getEntryType() == EntryType.VEHICLE)
+                && Boolean.TRUE.equals(entry.getActive())
                 && (entry.getBlock() == null || entry.getApartment() == null)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Para condômino, informe bloco/página e apartamento."
+                    "Para cadastros vinculados à ocupação, informe bloco e apartamento."
             );
+        }
+    }
+
+    private void syncOccupancy(AppUser appUser, RegistryEntry entry) {
+        if (!occupancyService.isOccupancyManagedType(entry.getEntryType())) {
+            entry.setOccupancyId(null);
+            return;
+        }
+
+        if (entry.getBlock() == null || entry.getApartment() == null) {
+            if (entry.getEntryType() == EntryType.RESIDENT) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Para condômino, informe bloco e apartamento.");
+            }
+            entry.setOccupancyId(null);
+            return;
+        }
+
+        if (Boolean.TRUE.equals(entry.getActive())) {
+            ApartmentOccupancy occupancy = occupancyService.ensureActiveOccupancy(
+                    appUser, entry.getBlock(), entry.getApartment());
+            entry.setOccupancyId(occupancy.getId());
         }
     }
 
@@ -251,6 +334,7 @@ public class RegistryEntryService {
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),
+                entry.getOccupancyId(),
                 entry.getEntryType(),
                 entry.getName(),
                 entry.getDocument(),

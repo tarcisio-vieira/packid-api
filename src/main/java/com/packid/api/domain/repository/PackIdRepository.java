@@ -145,6 +145,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
              AND pe.id = p.person_id
             WHERE p.tenant_id = :tenantId
               AND p.deleted = false
+              AND p.arrived_at >= COALESCE(CAST(:fromTs AS timestamp), '-infinity'::timestamp)
+              AND p.arrived_at <  COALESCE(CAST(:toTs   AS timestamp), 'infinity'::timestamp)
               AND (
                     (
                         LOWER(TRIM(COALESCE(p.building_block, ''))) = LOWER(TRIM(:block))
@@ -179,6 +181,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
             @Param("tenantId") UUID tenantId,
             @Param("block") String block,
             @Param("apartment") String apartment,
+            @Param("fromTs") java.sql.Timestamp fromTs,
+            @Param("toTs") java.sql.Timestamp toTs,
             @Param("limit") int limit
     );
 
