@@ -5,11 +5,12 @@ import java.util.UUID;
 
 public record PackIdRecentResponse(
         UUID id,
+        String block,
         String apartment,
-        String  residentFullName,
+        String residentFullName,
         String packageCode,
         String labelPackageCode,
-        String  observations,
+        String observations,
         Instant arrivedAt,
         String createdBy
 ) {}

@@ -1,9 +1,20 @@
 server:
   port: 8080
+  servlet:
+    session:
+      timeout: 24h
+      cookie:
+        max-age: 24h
+        http-only: true
+        same-site: lax
 
 spring:
   application:
     name: packid-api
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   security:
     oauth2:
       client:
@@ -15,6 +26,7 @@ spring:
               - openid
               - profile
               - email
+              - https://www.googleapis.com/auth/drive.file
         provider:
           google:
             issuer-uri: https://accounts.google.com

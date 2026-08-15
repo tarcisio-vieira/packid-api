@@ -3,6 +3,13 @@ server:
   address: 127.0.0.1
   servlet:
     context-path: /packid
+    session:
+      timeout: 24h
+      cookie:
+        max-age: 24h
+        http-only: true
+        secure: true
+        same-site: lax
   forward-headers-strategy: framework
   tomcat:
     redirect-context-root: false

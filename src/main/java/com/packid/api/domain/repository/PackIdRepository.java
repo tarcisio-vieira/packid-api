@@ -51,6 +51,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
     interface PackIdRecentRow {
         UUID getId();
 
+        String getBlock();
+
         String getApartment();
 
         String getResidentFullName();
@@ -69,6 +71,7 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
     @Query(value = """
             SELECT
               p.id AS id,
+              p.building_block AS block,
               ru.code AS apartment,
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,

@@ -1,0 +1,142 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0011-create-registry-entry
+      author: packid
+      changes:
+        - createTable:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: person_id
+                  type: uuid
+              - column:
+                  name: entry_type
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: document
+                  type: varchar(40)
+              - column:
+                  name: phone
+                  type: varchar(40)
+              - column:
+                  name: email
+                  type: varchar(255)
+              - column:
+                  name: block
+                  type: varchar(30)
+              - column:
+                  name: apartment
+                  type: varchar(30)
+              - column:
+                  name: company
+                  type: varchar(150)
+              - column:
+                  name: owner_name
+                  type: varchar(200)
+              - column:
+                  name: brand
+                  type: varchar(100)
+              - column:
+                  name: model
+                  type: varchar(100)
+              - column:
+                  name: color
+                  type: varchar(60)
+              - column:
+                  name: identifier
+                  type: varchar(80)
+              - column:
+                  name: species
+                  type: varchar(80)
+              - column:
+                  name: breed
+                  type: varchar(100)
+              - column:
+                  name: parking_space
+                  type: varchar(40)
+              - column:
+                  name: notes
+                  type: text
+              - column:
+                  name: active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+              - column:
+                  name: deleted_at
+                  type: timestamp
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: registry_entry
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_registry_entry_tenant
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: registry_entry
+            baseColumnNames: tenant_id,person_id
+            referencedTableName: person
+            referencedColumnNames: tenant_id,id
+            constraintName: fk_registry_entry_person_same_tenant
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_tenant_type
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: entry_type
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_tenant_identifier
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: identifier

@@ -1,0 +1,263 @@
+package com.packid.api.integration.google;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class GoogleDrivePhotoService {
+
+    private static final String DRIVE_API = "https://www.googleapis.com";
+    private static final String PHOTO_FOLDER_NAME = "PackID - Fotos";
+    private static final String FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+
+    private final RestClient restClient;
+    private final ObjectMapper objectMapper;
+
+    public GoogleDrivePhotoService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+        this.restClient = RestClient.builder()
+                .baseUrl(DRIVE_API)
+                .build();
+    }
+
+    public DriveFile uploadPhoto(
+            OAuth2AuthorizedClient authorizedClient,
+            UUID tenantId,
+            UUID registryEntryId,
+            String entryType,
+            String originalFilename,
+            String mimeType,
+            byte[] bytes
+    ) {
+        String accessToken = accessToken(authorizedClient);
+        String folderId = findOrCreatePhotoFolder(accessToken);
+
+        String safeName = buildFileName(registryEntryId, originalFilename, mimeType);
+        Map<String, Object> metadata = Map.of(
+                "name", safeName,
+                "parents", List.of(folderId),
+                "appProperties", Map.of(
+                        "packidTenantId", tenantId.toString(),
+                        "packidRegistryEntryId", registryEntryId.toString(),
+                        "packidEntryType", entryType
+                )
+        );
+
+        try {
+            String boundary = "packid-" + UUID.randomUUID();
+            byte[] body = multipartRelatedBody(boundary, metadata, mimeType, bytes);
+
+            DriveFile created = restClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/upload/drive/v3/files")
+                            .queryParam("uploadType", "multipart")
+                            .queryParam("fields", "id,name,mimeType,size")
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .contentType(MediaType.parseMediaType("multipart/related; boundary=" + boundary))
+                    .body(body)
+                    .retrieve()
+                    .body(DriveFile.class);
+
+            if (created == null || created.id() == null || created.id().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "O Google Drive não retornou o identificador da foto.");
+            }
+            return created;
+        } catch (RestClientResponseException ex) {
+            throw driveException("Não foi possível enviar a foto para o Google Drive.", ex);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Não foi possível preparar a foto para envio ao Google Drive.", ex);
+        }
+    }
+
+    public PhotoContent downloadPhoto(
+            OAuth2AuthorizedClient authorizedClient,
+            String driveFileId,
+            String fallbackMimeType
+    ) {
+        String accessToken = accessToken(authorizedClient);
+        try {
+            ResponseEntity<byte[]> response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/drive/v3/files/{fileId}")
+                            .queryParam("alt", "media")
+                            .build(driveFileId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .toEntity(byte[].class);
+
+            byte[] body = response.getBody();
+            if (body == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Foto não encontrada no Google Drive.");
+            }
+
+            MediaType contentType = response.getHeaders().getContentType();
+            String resolvedMimeType = contentType != null
+                    ? contentType.toString()
+                    : fallbackMimeType;
+
+            return new PhotoContent(body, resolvedMimeType);
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Foto não encontrada no Google Drive.");
+            }
+            if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "A conta Google logada não possui acesso a esta foto no Drive.");
+            }
+            throw driveException("Não foi possível carregar a foto do Google Drive.", ex);
+        }
+    }
+
+    public void deletePhoto(OAuth2AuthorizedClient authorizedClient, String driveFileId) {
+        if (driveFileId == null || driveFileId.isBlank()) return;
+
+        String accessToken = accessToken(authorizedClient);
+        try {
+            restClient.delete()
+                    .uri("/drive/v3/files/{fileId}", driveFileId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) return;
+            if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "A conta Google logada não possui permissão para excluir esta foto do Drive.");
+            }
+            throw driveException("Não foi possível excluir a foto do Google Drive.", ex);
+        }
+    }
+
+    private String findOrCreatePhotoFolder(String accessToken) {
+        String q = "mimeType='" + FOLDER_MIME_TYPE + "' and trashed=false " +
+                "and appProperties has { key='packidFolder' and value='photos' }";
+
+        try {
+            DriveFileList list = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/drive/v3/files")
+                            .queryParam("q", "{q}")
+                            .queryParam("spaces", "drive")
+                            .queryParam("pageSize", 10)
+                            .queryParam("fields", "files(id,name,mimeType)")
+                            .build(q))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(DriveFileList.class);
+
+            if (list != null && list.files() != null && !list.files().isEmpty()) {
+                return list.files().get(0).id();
+            }
+
+            Map<String, Object> metadata = Map.of(
+                    "name", PHOTO_FOLDER_NAME,
+                    "mimeType", FOLDER_MIME_TYPE,
+                    "appProperties", Map.of("packidFolder", "photos")
+            );
+
+            DriveFile folder = restClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/drive/v3/files")
+                            .queryParam("fields", "id,name,mimeType")
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(metadata)
+                    .retrieve()
+                    .body(DriveFile.class);
+
+            if (folder == null || folder.id() == null || folder.id().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "O Google Drive não retornou o identificador da pasta de fotos.");
+            }
+            return folder.id();
+        } catch (RestClientResponseException ex) {
+            throw driveException("Não foi possível acessar a pasta de fotos no Google Drive.", ex);
+        }
+    }
+
+    private byte[] multipartRelatedBody(
+            String boundary,
+            Map<String, Object> metadata,
+            String mimeType,
+            byte[] bytes
+    ) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        write(output, "--" + boundary + "\r\n");
+        write(output, "Content-Type: application/json; charset=UTF-8\r\n\r\n");
+        output.write(objectMapper.writeValueAsBytes(metadata));
+        write(output, "\r\n--" + boundary + "\r\n");
+        write(output, "Content-Type: " + mimeType + "\r\n\r\n");
+        output.write(bytes);
+        write(output, "\r\n--" + boundary + "--\r\n");
+        return output.toByteArray();
+    }
+
+    private void write(ByteArrayOutputStream output, String value) throws IOException {
+        output.write(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String accessToken(OAuth2AuthorizedClient authorizedClient) {
+        if (authorizedClient == null || authorizedClient.getAccessToken() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Não foi possível obter autorização do Google Drive. Entre novamente com o Google.");
+        }
+        return authorizedClient.getAccessToken().getTokenValue();
+    }
+
+    private String buildFileName(UUID registryEntryId, String originalFilename, String mimeType) {
+        String extension = extension(originalFilename, mimeType);
+        return "packid-" + registryEntryId + "-" + System.currentTimeMillis() + extension;
+    }
+
+    private String extension(String originalFilename, String mimeType) {
+        if (originalFilename != null) {
+            int dot = originalFilename.lastIndexOf('.');
+            if (dot >= 0 && dot < originalFilename.length() - 1) {
+                String ext = originalFilename.substring(dot)
+                        .replaceAll("[^A-Za-z0-9.]", "")
+                        .toLowerCase();
+                if (ext.length() <= 8) return ext;
+            }
+        }
+        if ("image/png".equalsIgnoreCase(mimeType)) return ".png";
+        return ".jpg";
+    }
+
+    private ResponseStatusException driveException(String message, RestClientResponseException ex) {
+        if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
+            return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "A conta Google precisa autorizar o PackID a gravar fotos no Google Drive. " +
+                            "Saia do sistema, entre novamente com o Google e aceite a permissão solicitada.");
+        }
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, message, ex);
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DriveFile(String id, String name, String mimeType, String size) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record DriveFileList(List<DriveFile> files) {}
+
+    public record PhotoContent(byte[] bytes, String mimeType) {}
+}

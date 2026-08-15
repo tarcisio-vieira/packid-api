@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0012-packid-add-building-block
+      author: packid
+      changes:
+        - addColumn:
+            tableName: pack_id
+            columns:
+              - column:
+                  name: building_block
+                  type: varchar(30)

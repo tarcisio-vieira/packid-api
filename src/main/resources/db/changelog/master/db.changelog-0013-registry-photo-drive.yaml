@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0013-registry-photo-drive
+      author: packid
+      changes:
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: photo_drive_file_id
+                  type: varchar(255)
+              - column:
+                  name: photo_mime_type
+                  type: varchar(100)
+              - column:
+                  name: photo_file_name
+                  type: varchar(255)
+              - column:
+                  name: photo_owner_email
+                  type: varchar(255)
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_photo_drive_file_id
+            columns:
+              - column:
+                  name: photo_drive_file_id

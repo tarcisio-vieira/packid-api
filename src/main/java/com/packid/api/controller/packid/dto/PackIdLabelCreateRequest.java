@@ -4,5 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public record PackIdLabelCreateRequest(
         @NotBlank String packageCode,
-        @NotBlank String apartment
+        @NotBlank String apartment,
+        String block
 ) {}

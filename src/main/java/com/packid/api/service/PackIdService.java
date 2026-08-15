@@ -10,11 +10,13 @@ import com.packid.api.domain.model.PackId;
 import com.packid.api.domain.model.Person;
 import com.packid.api.domain.model.ResidentialUnit;
 import com.packid.api.domain.model.Condominium;
+import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.repository.CondominiumRepository;
 import com.packid.api.domain.repository.AppUserRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
 import com.packid.api.domain.repository.ResidentialUnitRepository;
+import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.type.PackageType;
 import jakarta.transaction.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,6 +38,7 @@ public class PackIdService {
     private final AppUserRepository appUserRepository;
     private final ResidentialUnitRepository residentialUnitRepository;
     private final PersonRepository personRepository;
+    private final RegistryEntryRepository registryEntryRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CondominiumRepository condominiumRepository;
 
@@ -44,6 +47,7 @@ public class PackIdService {
             AppUserRepository appUserRepository,
             ResidentialUnitRepository residentialUnitRepository,
             PersonRepository personRepository,
+            RegistryEntryRepository registryEntryRepository,
             CondominiumRepository condominiumRepository,
             ApplicationEventPublisher eventPublisher
     ) {
@@ -51,6 +55,7 @@ public class PackIdService {
         this.appUserRepository = appUserRepository;
         this.residentialUnitRepository = residentialUnitRepository;
         this.personRepository = personRepository;
+        this.registryEntryRepository = registryEntryRepository;
         this.condominiumRepository = condominiumRepository;
         this.eventPublisher = eventPublisher;
     }
@@ -169,10 +174,11 @@ public class PackIdService {
         UUID tenantId = appUser.getTenantId();
 
         String apartment = req.apartment().trim();
+        String block = cleanOptional(req.block());
         String packageCode = req.packageCode().trim();
 
         ResidentialUnit unit = resolveOrCreateResidentialUnit(tenantId, apartment);
-        Person resident = resolveOrCreateSymbolicResident(tenantId);
+        Person resident = resolveResidentForUnit(tenantId, block, apartment);
 
         PackId p = new PackId();
         p.setTenantId(tenantId);
@@ -183,6 +189,7 @@ public class PackIdService {
         p.setPackageType(PackageType.PACKAGE);
         p.setPackageCode(packageCode);
         p.setLabelPackageCode(packageCode);
+        p.setBuildingBlock(block);
         p.setObservations("x ");
 
         if (email != null && !email.isBlank()) {
@@ -308,6 +315,7 @@ public class PackIdService {
         return repository.findRecentByTenant(tenantId, safeLimit, fromTs, toTs).stream()
                 .map(r -> new PackIdRecentResponse(
                         r.getId(),
+                        r.getBlock(),
                         r.getApartment(),
                         r.getResidentFullName(),
                         r.getPackageCode(),
@@ -317,6 +325,34 @@ public class PackIdService {
                         r.getCreatedBy()
                 ))
                 .toList();
+    }
+
+    private String cleanOptional(String value) {
+        if (value == null) return null;
+        String cleaned = value.trim();
+        return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private Person resolveResidentForUnit(UUID tenantId, String block, String apartment) {
+        List<RegistryEntry> residents;
+
+        if (block != null) {
+            residents = registryEntryRepository
+                    .findAllByTenantIdAndEntryTypeAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
+                            tenantId, RegistryEntry.EntryType.RESIDENT, block, apartment);
+        } else {
+            residents = registryEntryRepository
+                    .findAllByTenantIdAndEntryTypeAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
+                            tenantId, RegistryEntry.EntryType.RESIDENT, apartment);
+        }
+
+        if (residents.size() == 1 && residents.get(0).getPersonId() != null) {
+            return personRepository
+                    .findByTenantIdAndIdAndDeletedFalse(tenantId, residents.get(0).getPersonId())
+                    .orElseGet(() -> resolveOrCreateSymbolicResident(tenantId));
+        }
+
+        return resolveOrCreateSymbolicResident(tenantId);
     }
 
     private static final String SYMBOLIC_RESIDENT_NAME = "***";
