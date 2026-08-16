@@ -103,6 +103,18 @@ public class UnitChangeEmailListener {
     }
 
     private String plainBody(UnitChangeEmailEvent event, String condominiumName) {
+        if (isPackIdReceived(event)) {
+            return "VSGI Condomínio\n\n"
+                    + "Olá,\n\n"
+                    + event.details() + "\n\n"
+                    + "Condomínio: " + condominiumName + "\n"
+                    + "Unidade: Bloco " + event.block() + " / Apartamento " + event.apartment() + "\n"
+                    + "Alteração: " + event.title() + "\n"
+                    + "Data/Hora: " + event.occurredAt().format(DATE_TIME) + "\n"
+                    + "Realizado por: " + event.actor() + "\n\n"
+                    + "Esta é uma mensagem automática do VSGI Condomínio. Não responda a este e-mail.";
+        }
+
         return "Olá,\n\n"
                 + "Foi realizada uma alteração nos dados da sua unidade no VSGI Condomínio.\n\n"
                 + "Condomínio: " + condominiumName + "\n"
@@ -116,6 +128,23 @@ public class UnitChangeEmailListener {
     }
 
     private String htmlBody(UnitChangeEmailEvent event, String condominiumName) {
+        if (isPackIdReceived(event)) {
+            return "<div style=\"font-family:Arial,sans-serif;color:#222;line-height:1.5\">"
+                    + "<h2 style=\"margin-bottom:8px\">VSGI Condomínio</h2>"
+                    + "<p>Olá,</p>"
+                    + "<p>" + HtmlUtils.htmlEscape(event.details()) + "</p>"
+                    + "<table style=\"border-collapse:collapse\">"
+                    + row("Condomínio", condominiumName)
+                    + row("Unidade", "Bloco " + event.block() + " / Apartamento " + event.apartment())
+                    + row("Alteração", event.title())
+                    + row("Data/Hora", event.occurredAt().format(DATE_TIME))
+                    + row("Realizado por", event.actor())
+                    + "</table>"
+                    + "<p style=\"margin-top:22px;color:#666;font-size:12px\">"
+                    + "Esta é uma mensagem automática do VSGI Condomínio. Não responda a este e-mail."
+                    + "</p></div>";
+        }
+
         return "<div style=\"font-family:Arial,sans-serif;color:#222;line-height:1.5\">"
                 + "<h2 style=\"margin-bottom:8px\">VSGI Condomínio</h2>"
                 + "<p>Olá,</p><p>Foi realizada uma alteração nos dados da sua unidade.</p>"
@@ -130,6 +159,10 @@ public class UnitChangeEmailListener {
                 + "<p style=\"margin-top:22px;color:#666;font-size:12px\">"
                 + "Esta é uma mensagem automática do VSGI Condomínio. Não responda a este e-mail."
                 + "</p></div>";
+    }
+
+    private boolean isPackIdReceived(UnitChangeEmailEvent event) {
+        return "PACKID_RECEIVED".equalsIgnoreCase(event.changeType());
     }
 
     private String row(String label, String value) {
