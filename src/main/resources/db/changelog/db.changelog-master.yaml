@@ -45,3 +45,5 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0021-registry-import-fields.yaml
   - include:
       file: db/changelog/master/db.changelog-0022-packid-label-print-settings.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0023-single-document-photo.yaml

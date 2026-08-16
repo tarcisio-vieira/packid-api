@@ -19,7 +19,7 @@ import java.util.UUID;
 
 @Service
 public class RegistryDocumentPhotoService {
-    public enum DocumentKind { CPF, RG }
+    public enum DocumentKind { DOCUMENT }
 
     private final RegistryEntryRepository repository;
     private final AuthenticatedUserService authenticatedUserService;
@@ -40,11 +40,16 @@ public class RegistryDocumentPhotoService {
     }
 
     public DocumentKind kind(String value) {
-        try {
-            return DocumentKind.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Documento inválido. Use CPF ou RG.");
+        String normalized = clean(value);
+        if (normalized != null) {
+            normalized = normalized.toLowerCase(Locale.ROOT);
+            // "cpf" e "rg" continuam aceitos como aliases temporários para compatibilidade
+            // com versões anteriores do front-end durante a atualização do ambiente.
+            if (normalized.equals("document") || normalized.equals("cpf") || normalized.equals("rg")) {
+                return DocumentKind.DOCUMENT;
+            }
         }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Documento inválido. Use document.");
     }
 
     @Transactional
@@ -62,10 +67,10 @@ public class RegistryDocumentPhotoService {
 
         if (oldFileId != null && currentOwner != null && !sameEmail(currentOwner, uploadOwner) && !sameEmail(currentOwner, appUser.getEmail())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A imagem atual do " + kind.name() + " está em outra conta Google. Reconecte a conta oficial antes de substituí-la.");
+                    "A imagem atual do documento está em outra conta Google. Reconecte a conta oficial antes de substituí-la.");
         }
 
-        String name = kind.name().toLowerCase(Locale.ROOT) + "-" + processed.fileName();
+        String name = "documento-" + processed.fileName();
         GoogleDrivePhotoService.DriveFile uploaded = token != null
                 ? driveService.uploadPhoto(token, appUser.getTenantId(), entry.getId(), entry.getEntryType().name(), name,
                     processed.mimeType(), processed.bytes(), null, null)
@@ -92,7 +97,7 @@ public class RegistryDocumentPhotoService {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         String fileId = fileId(entry, kind);
-        if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do " + kind.name() + " não cadastrada.");
+        if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do documento não cadastrada.");
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
         if (official != null && sameEmail(owner(entry, kind), official.getEmail())) {
@@ -109,7 +114,7 @@ public class RegistryDocumentPhotoService {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         String fileId = fileId(entry, kind);
-        if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do " + kind.name() + " não cadastrada.");
+        if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do documento não cadastrada.");
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
         if (official != null && sameEmail(owner(entry, kind), official.getEmail())) {
@@ -129,7 +134,7 @@ public class RegistryDocumentPhotoService {
         if (entry.getEntryType() != RegistryEntry.EntryType.SERVICE_PROVIDER
                 && entry.getEntryType() != RegistryEntry.EntryType.DELIVERY_PERSON) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Fotos de CPF e identidade/RG estão disponíveis para prestadores de serviço e entregadores.");
+                    "A foto de documento está disponível para prestadores de serviço e entregadores.");
         }
         return entry;
     }
@@ -140,15 +145,14 @@ public class RegistryDocumentPhotoService {
                 .filter(a -> clean(a.getRefreshTokenEncrypted()) != null).orElse(null);
     }
 
-    private String fileId(RegistryEntry e, DocumentKind k) { return k == DocumentKind.CPF ? e.getCpfPhotoDriveFileId() : e.getRgPhotoDriveFileId(); }
-    private String mime(RegistryEntry e, DocumentKind k) { return k == DocumentKind.CPF ? e.getCpfPhotoMimeType() : e.getRgPhotoMimeType(); }
-    private String owner(RegistryEntry e, DocumentKind k) { return k == DocumentKind.CPF ? e.getCpfPhotoOwnerEmail() : e.getRgPhotoOwnerEmail(); }
+    private String fileId(RegistryEntry e, DocumentKind k) { return e.getDocumentPhotoDriveFileId(); }
+    private String mime(RegistryEntry e, DocumentKind k) { return e.getDocumentPhotoMimeType(); }
+    private String owner(RegistryEntry e, DocumentKind k) { return e.getDocumentPhotoOwnerEmail(); }
     private void set(RegistryEntry e, DocumentKind k, String id, String mime, String name, String owner) {
-        if (k == DocumentKind.CPF) {
-            e.setCpfPhotoDriveFileId(id); e.setCpfPhotoMimeType(mime); e.setCpfPhotoFileName(name); e.setCpfPhotoOwnerEmail(owner);
-        } else {
-            e.setRgPhotoDriveFileId(id); e.setRgPhotoMimeType(mime); e.setRgPhotoFileName(name); e.setRgPhotoOwnerEmail(owner);
-        }
+        e.setDocumentPhotoDriveFileId(id);
+        e.setDocumentPhotoMimeType(mime);
+        e.setDocumentPhotoFileName(name);
+        e.setDocumentPhotoOwnerEmail(owner);
     }
     private boolean sameEmail(String a, String b) { String x=clean(a), y=clean(b); return x != null && y != null && x.equalsIgnoreCase(y); }
     private String actor(AppUser u) { return clean(u.getEmail()) == null ? "system" : u.getEmail().trim(); }

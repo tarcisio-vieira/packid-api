@@ -274,6 +274,10 @@ public class RegistryEntryService {
         entry.setModel(clean(request.model()));
         entry.setColor(clean(request.color()));
         entry.setIdentifier(clean(request.identifier()));
+        if (entry.getEntryType() == EntryType.SERVICE_PROVIDER || entry.getEntryType() == EntryType.DELIVERY_PERSON) {
+            // Prestador/entregador usa um único número de documento (CPF, CNH, RG ou outro).
+            entry.setIdentifier(null);
+        }
         entry.setSpecies(clean(request.species()));
         entry.setBreed(clean(request.breed()));
         entry.setPetSize(clean(request.petSize()));
@@ -682,12 +686,9 @@ public class RegistryEntryService {
                 sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())
                         || sameEmail(entry.getPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getPhotoFileName(),
-                entry.getCpfPhotoDriveFileId() != null && !entry.getCpfPhotoDriveFileId().isBlank(),
-                sameEmail(entry.getCpfPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getCpfPhotoOwnerEmail(), officialGoogleEmail),
-                entry.getCpfPhotoFileName(),
-                entry.getRgPhotoDriveFileId() != null && !entry.getRgPhotoDriveFileId().isBlank(),
-                sameEmail(entry.getRgPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getRgPhotoOwnerEmail(), officialGoogleEmail),
-                entry.getRgPhotoFileName(),
+                entry.getDocumentPhotoDriveFileId() != null && !entry.getDocumentPhotoDriveFileId().isBlank(),
+                sameEmail(entry.getDocumentPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getDocumentPhotoOwnerEmail(), officialGoogleEmail),
+                entry.getDocumentPhotoFileName(),
                 entry.getActive(),
                 entry.getCreatedAt(),
                 entry.getUpdatedAt()

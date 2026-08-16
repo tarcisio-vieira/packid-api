@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0023-single-document-photo
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column: { name: document_photo_drive_file_id, type: varchar(255) }
+              - column: { name: document_photo_mime_type, type: varchar(100) }
+              - column: { name: document_photo_file_name, type: varchar(255) }
+              - column: { name: document_photo_owner_email, type: varchar(255) }
+        - sql:
+            splitStatements: false
+            sql: |
+              UPDATE registry_entry
+                 SET document_photo_drive_file_id = CASE
+                       WHEN cpf_photo_drive_file_id IS NOT NULL THEN cpf_photo_drive_file_id
+                       ELSE rg_photo_drive_file_id
+                     END,
+                     document_photo_mime_type = CASE
+                       WHEN cpf_photo_drive_file_id IS NOT NULL THEN cpf_photo_mime_type
+                       ELSE rg_photo_mime_type
+                     END,
+                     document_photo_file_name = CASE
+                       WHEN cpf_photo_drive_file_id IS NOT NULL THEN cpf_photo_file_name
+                       ELSE rg_photo_file_name
+                     END,
+                     document_photo_owner_email = CASE
+                       WHEN cpf_photo_drive_file_id IS NOT NULL THEN cpf_photo_owner_email
+                       ELSE rg_photo_owner_email
+                     END
+               WHERE document_photo_drive_file_id IS NULL
+                 AND (cpf_photo_drive_file_id IS NOT NULL OR rg_photo_drive_file_id IS NOT NULL);

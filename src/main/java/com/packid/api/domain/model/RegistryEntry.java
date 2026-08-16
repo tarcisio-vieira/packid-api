@@ -132,23 +132,17 @@ public class RegistryEntry extends AuditableEntity {
     @Column(name = "photo_owner_email", length = 255)
     private String photoOwnerEmail;
 
-    @Column(name = "cpf_photo_drive_file_id", length = 255)
-    private String cpfPhotoDriveFileId;
-    @Column(name = "cpf_photo_mime_type", length = 100)
-    private String cpfPhotoMimeType;
-    @Column(name = "cpf_photo_file_name", length = 255)
-    private String cpfPhotoFileName;
-    @Column(name = "cpf_photo_owner_email", length = 255)
-    private String cpfPhotoOwnerEmail;
+    @Column(name = "document_photo_drive_file_id", length = 255)
+    private String documentPhotoDriveFileId;
 
-    @Column(name = "rg_photo_drive_file_id", length = 255)
-    private String rgPhotoDriveFileId;
-    @Column(name = "rg_photo_mime_type", length = 100)
-    private String rgPhotoMimeType;
-    @Column(name = "rg_photo_file_name", length = 255)
-    private String rgPhotoFileName;
-    @Column(name = "rg_photo_owner_email", length = 255)
-    private String rgPhotoOwnerEmail;
+    @Column(name = "document_photo_mime_type", length = 100)
+    private String documentPhotoMimeType;
+
+    @Column(name = "document_photo_file_name", length = 255)
+    private String documentPhotoFileName;
+
+    @Column(name = "document_photo_owner_email", length = 255)
+    private String documentPhotoOwnerEmail;
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;
