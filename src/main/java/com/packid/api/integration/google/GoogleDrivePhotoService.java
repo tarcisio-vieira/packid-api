@@ -65,9 +65,18 @@ public class GoogleDrivePhotoService {
         if (accessToken == null || accessToken.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
         }
-        String folderId = "SERVICE_PROVIDER".equalsIgnoreCase(entryType)
-                ? findOrCreateServiceProviderFolder(accessToken, registryEntryId)
-                : findOrCreatePhotoFolder(accessToken, block, apartment);
+        String folderId;
+        if ("SERVICE_PROVIDER".equalsIgnoreCase(entryType)) {
+            folderId = findOrCreateRegistryPersonFolder(
+                    accessToken, registryEntryId, "Service Providers", "service-providers",
+                    "Provider ", "vsgiServiceProviderId");
+        } else if ("DELIVERY_PERSON".equalsIgnoreCase(entryType)) {
+            folderId = findOrCreateRegistryPersonFolder(
+                    accessToken, registryEntryId, "Delivery People", "delivery-people",
+                    "Delivery Person ", "vsgiDeliveryPersonId");
+        } else {
+            folderId = findOrCreatePhotoFolder(accessToken, block, apartment);
+        }
 
         String safeName = buildFileName(registryEntryId, originalFilename, mimeType);
         Map<String, Object> metadata = Map.of(
@@ -184,11 +193,18 @@ public class GoogleDrivePhotoService {
         }
     }
 
-    private String findOrCreateServiceProviderFolder(String accessToken, UUID registryEntryId) {
+    private String findOrCreateRegistryPersonFolder(
+            String accessToken,
+            UUID registryEntryId,
+            String sectionName,
+            String sectionKey,
+            String personPrefix,
+            String personProperty
+    ) {
         String rootFolderId = findOrCreateFolder(accessToken, null, ROOT_FOLDER_NAME, "vsgiFolder", "condominium");
-        String providersFolderId = findOrCreateFolder(accessToken, rootFolderId, "Service Providers", "vsgiSection", "service-providers");
-        return findOrCreateFolder(accessToken, providersFolderId, "Provider " + registryEntryId,
-                "vsgiServiceProviderId", registryEntryId.toString());
+        String sectionFolderId = findOrCreateFolder(accessToken, rootFolderId, sectionName, "vsgiSection", sectionKey);
+        return findOrCreateFolder(accessToken, sectionFolderId, personPrefix + registryEntryId,
+                personProperty, registryEntryId.toString());
     }
 
     private String findOrCreatePhotoFolder(String accessToken, String block, String apartment) {

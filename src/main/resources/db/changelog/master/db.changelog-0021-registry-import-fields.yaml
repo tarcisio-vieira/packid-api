@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0021-registry-import-fields
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: unit_owner
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: birth_date
+                  type: date
+              - column:
+                  name: profession
+                  type: varchar(120)
+              - column:
+                  name: pne
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: pet_size
+                  type: varchar(40)
+              - column:
+                  name: parking_space_rented
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: parking_space_rental_notes
+                  type: varchar(250)

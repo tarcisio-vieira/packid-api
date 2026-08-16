@@ -41,3 +41,5 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0019-service-providers.yaml
   - include:
       file: db/changelog/master/db.changelog-0020-email-notification-settings.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0021-registry-import-fields.yaml

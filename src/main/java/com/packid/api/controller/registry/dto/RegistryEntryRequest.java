@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record RegistryEntryRequest(
@@ -13,6 +14,10 @@ public record RegistryEntryRequest(
         String document,
         String phone,
         @Email String email,
+        Boolean unitOwner,
+        LocalDate birthDate,
+        String profession,
+        Boolean pne,
         String block,
         String apartment,
         String company,
@@ -24,7 +29,10 @@ public record RegistryEntryRequest(
         String identifier,
         String species,
         String breed,
+        String petSize,
         String parkingSpace,
+        Boolean parkingSpaceRented,
+        String parkingSpaceRentalNotes,
         String notes,
         Boolean active
 ) {}

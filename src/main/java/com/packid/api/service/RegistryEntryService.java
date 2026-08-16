@@ -261,6 +261,10 @@ public class RegistryEntryService {
         entry.setDocument(clean(request.document()));
         entry.setPhone(clean(request.phone()));
         entry.setEmail(clean(request.email()));
+        entry.setUnitOwner(request.unitOwner() == null ? Boolean.FALSE : request.unitOwner());
+        entry.setBirthDate(request.birthDate());
+        entry.setProfession(clean(request.profession()));
+        entry.setPne(request.pne() == null ? Boolean.FALSE : request.pne());
         entry.setBlock(clean(request.block()));
         entry.setApartment(clean(request.apartment()));
         entry.setCompany(clean(request.company()));
@@ -272,9 +276,28 @@ public class RegistryEntryService {
         entry.setIdentifier(clean(request.identifier()));
         entry.setSpecies(clean(request.species()));
         entry.setBreed(clean(request.breed()));
+        entry.setPetSize(clean(request.petSize()));
         entry.setParkingSpace(clean(request.parkingSpace()));
+        entry.setParkingSpaceRented(request.parkingSpaceRented() == null ? Boolean.FALSE : request.parkingSpaceRented());
+        entry.setParkingSpaceRentalNotes(clean(request.parkingSpaceRentalNotes()));
         entry.setNotes(clean(request.notes()));
         entry.setActive(request.active() == null ? Boolean.TRUE : request.active());
+
+        if (entry.getEntryType() != EntryType.RESIDENT) {
+            entry.setUnitOwner(false);
+            entry.setBirthDate(null);
+            entry.setProfession(null);
+            entry.setPne(false);
+        }
+        if (entry.getEntryType() != EntryType.PET) {
+            entry.setPetSize(null);
+        }
+        if (entry.getEntryType() != EntryType.VEHICLE) {
+            entry.setParkingSpaceRented(false);
+            entry.setParkingSpaceRentalNotes(null);
+        } else if (!Boolean.TRUE.equals(entry.getParkingSpaceRented())) {
+            entry.setParkingSpaceRentalNotes(null);
+        }
 
         if ((entry.getEntryType() == EntryType.RESIDENT
                 || entry.getEntryType() == EntryType.BICYCLE
@@ -290,17 +313,22 @@ public class RegistryEntryService {
     }
 
     private void syncServiceCompany(AppUser appUser, RegistryEntry entry) {
-        if (entry.getEntryType() != EntryType.SERVICE_PROVIDER) {
+        boolean usesCompanyRegistry = entry.getEntryType() == EntryType.SERVICE_PROVIDER
+                || entry.getEntryType() == EntryType.DELIVERY_PERSON;
+        if (!usesCompanyRegistry) {
             entry.setServiceCompanyId(null);
             return;
         }
         if (entry.getServiceCompanyId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione a empresa do prestador de serviço.");
+            String message = entry.getEntryType() == EntryType.DELIVERY_PERSON
+                    ? "Selecione a empresa/transportadora do entregador."
+                    : "Selecione a empresa do prestador de serviço.";
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         var company = serviceCompanyRepository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), entry.getServiceCompanyId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Empresa prestadora não encontrada."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Empresa não encontrada."));
         if (!Boolean.TRUE.equals(company.getActive())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A empresa prestadora selecionada está inativa.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A empresa selecionada está inativa.");
         }
         entry.setCompany(company.getName());
     }
@@ -384,7 +412,9 @@ public class RegistryEntryService {
         person.setDocument(entry.getDocument());
         person.setEmail(entry.getEmail());
         person.setPhone(entry.getPhone());
-        person.setPersonType(Person.PersonType.RESIDENT);
+        person.setPersonType(Boolean.TRUE.equals(entry.getUnitOwner())
+                ? Person.PersonType.OWNER
+                : Person.PersonType.RESIDENT);
 
         Person saved = personRepository.save(person);
         entry.setPersonId(saved.getId());
@@ -508,6 +538,10 @@ public class RegistryEntryService {
         addChanged(fields, "documento/identificação", before.document(), after.getDocument());
         addChanged(fields, "telefone", before.phone(), after.getPhone());
         addChanged(fields, "e-mail", before.email(), after.getEmail());
+        addChanged(fields, "proprietário da unidade", before.unitOwner(), after.getUnitOwner());
+        addChanged(fields, "data de nascimento", before.birthDate(), after.getBirthDate());
+        addChanged(fields, "profissão", before.profession(), after.getProfession());
+        addChanged(fields, "PNE", before.pne(), after.getPne());
         addChanged(fields, "empresa", before.company(), after.getCompany());
         addChanged(fields, "responsável", before.ownerName(), after.getOwnerName());
         addChanged(fields, "marca", before.brand(), after.getBrand());
@@ -516,7 +550,10 @@ public class RegistryEntryService {
         addChanged(fields, "identificação/placa", before.identifier(), after.getIdentifier());
         addChanged(fields, "espécie", before.species(), after.getSpecies());
         addChanged(fields, "raça", before.breed(), after.getBreed());
+        addChanged(fields, "porte do pet", before.petSize(), after.getPetSize());
         addChanged(fields, "vaga", before.parkingSpace(), after.getParkingSpace());
+        addChanged(fields, "vaga alugada/cedida", before.parkingSpaceRented(), after.getParkingSpaceRented());
+        addChanged(fields, "detalhes da vaga alugada/cedida", before.parkingSpaceRentalNotes(), after.getParkingSpaceRentalNotes());
         addChanged(fields, "observação", before.notes(), after.getNotes());
         if (!Objects.equals(before.entryType(), after.getEntryType())) fields.add("tipo de cadastro");
         return fields;
@@ -534,9 +571,11 @@ public class RegistryEntryService {
     private EntrySnapshot snapshot(RegistryEntry entry) {
         return new EntrySnapshot(
                 entry.getEntryType(), entry.getName(), entry.getDocument(), entry.getPhone(), entry.getEmail(),
+                entry.getUnitOwner(), entry.getBirthDate(), entry.getProfession(), entry.getPne(),
                 entry.getBlock(), entry.getApartment(), entry.getCompany(), entry.getOwnerName(), entry.getBrand(),
                 entry.getModel(), entry.getColor(), entry.getIdentifier(), entry.getSpecies(), entry.getBreed(),
-                entry.getParkingSpace(), entry.getNotes(), entry.getActive()
+                entry.getPetSize(), entry.getParkingSpace(), entry.getParkingSpaceRented(), entry.getParkingSpaceRentalNotes(),
+                entry.getNotes(), entry.getActive()
         );
     }
 
@@ -580,6 +619,10 @@ public class RegistryEntryService {
             String document,
             String phone,
             String email,
+            Boolean unitOwner,
+            java.time.LocalDate birthDate,
+            String profession,
+            Boolean pne,
             String block,
             String apartment,
             String company,
@@ -590,7 +633,10 @@ public class RegistryEntryService {
             String identifier,
             String species,
             String breed,
+            String petSize,
             String parkingSpace,
+            Boolean parkingSpaceRented,
+            String parkingSpaceRentalNotes,
             String notes,
             Boolean active
     ) {
@@ -611,6 +657,10 @@ public class RegistryEntryService {
                 entry.getDocument(),
                 entry.getPhone(),
                 entry.getEmail(),
+                entry.getUnitOwner(),
+                entry.getBirthDate(),
+                entry.getProfession(),
+                entry.getPne(),
                 entry.getBlock(),
                 entry.getApartment(),
                 entry.getCompany(),
@@ -623,7 +673,10 @@ public class RegistryEntryService {
                 entry.getIdentifier(),
                 entry.getSpecies(),
                 entry.getBreed(),
+                entry.getPetSize(),
                 entry.getParkingSpace(),
+                entry.getParkingSpaceRented(),
+                entry.getParkingSpaceRentalNotes(),
                 entry.getNotes(),
                 entry.getPhotoDriveFileId() != null && !entry.getPhotoDriveFileId().isBlank(),
                 sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())

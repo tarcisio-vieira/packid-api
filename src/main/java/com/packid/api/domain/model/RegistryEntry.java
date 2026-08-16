@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -27,12 +28,7 @@ public class RegistryEntry extends AuditableEntity {
     private UUID occupancyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "occupancy_id",
-            referencedColumnName = "id",
-            insertable = false,
-            updatable = false
-    )
+    @JoinColumn(name = "occupancy_id", referencedColumnName = "id", insertable = false, updatable = false)
     private ApartmentOccupancy occupancy;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -57,6 +53,18 @@ public class RegistryEntry extends AuditableEntity {
 
     @Column(name = "email", length = 255)
     private String email;
+
+    @Column(name = "unit_owner", nullable = false)
+    private Boolean unitOwner = false;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @Column(name = "profession", length = 120)
+    private String profession;
+
+    @Column(name = "pne", nullable = false)
+    private Boolean pne = false;
 
     @Column(name = "block", length = 30)
     private String block;
@@ -95,8 +103,17 @@ public class RegistryEntry extends AuditableEntity {
     @Column(name = "breed", length = 100)
     private String breed;
 
+    @Column(name = "pet_size", length = 40)
+    private String petSize;
+
     @Column(name = "parking_space", length = 40)
     private String parkingSpace;
+
+    @Column(name = "parking_space_rented", nullable = false)
+    private Boolean parkingSpaceRented = false;
+
+    @Column(name = "parking_space_rental_notes", length = 250)
+    private String parkingSpaceRentalNotes;
 
     @Column(name = "notes", columnDefinition = "text")
     private String notes;

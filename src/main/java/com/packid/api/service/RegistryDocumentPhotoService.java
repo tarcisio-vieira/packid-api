@@ -51,7 +51,7 @@ public class RegistryDocumentPhotoService {
     public RegistryEntry upload(OidcUser oidcUser, UUID entryId, DocumentKind kind, MultipartFile file,
                                 OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
-        RegistryEntry entry = requireProvider(appUser, entryId);
+        RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         ImageCompressionService.ProcessedImage processed = imageCompressionService.process(file);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
@@ -90,7 +90,7 @@ public class RegistryDocumentPhotoService {
     public GoogleDrivePhotoService.PhotoContent download(OidcUser oidcUser, UUID entryId, DocumentKind kind,
                                                          OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
-        RegistryEntry entry = requireProvider(appUser, entryId);
+        RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         String fileId = fileId(entry, kind);
         if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do " + kind.name() + " não cadastrada.");
 
@@ -107,7 +107,7 @@ public class RegistryDocumentPhotoService {
     @Transactional
     public RegistryEntry delete(OidcUser oidcUser, UUID entryId, DocumentKind kind, OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
-        RegistryEntry entry = requireProvider(appUser, entryId);
+        RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         String fileId = fileId(entry, kind);
         if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do " + kind.name() + " não cadastrada.");
 
@@ -123,11 +123,13 @@ public class RegistryDocumentPhotoService {
         return repository.save(entry);
     }
 
-    private RegistryEntry requireProvider(AppUser appUser, UUID id) {
+    private RegistryEntry requireSupportedEntry(AppUser appUser, UUID id) {
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prestador de serviço não encontrado."));
-        if (entry.getEntryType() != RegistryEntry.EntryType.SERVICE_PROVIDER) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CPF/RG em imagem está disponível somente para prestadores de serviço.");
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        if (entry.getEntryType() != RegistryEntry.EntryType.SERVICE_PROVIDER
+                && entry.getEntryType() != RegistryEntry.EntryType.DELIVERY_PERSON) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Fotos de CPF e identidade/RG estão disponíveis para prestadores de serviço e entregadores.");
         }
         return entry;
     }
