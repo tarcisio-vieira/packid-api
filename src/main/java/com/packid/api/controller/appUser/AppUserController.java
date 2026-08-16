@@ -4,6 +4,7 @@ import com.packid.api.controller.appUser.dto.AppUserCreateRequest;
 import com.packid.api.controller.appUser.dto.AppUserResponse;
 import com.packid.api.controller.appUser.dto.AppUserUpdateRequest;
 import com.packid.api.service.AppUserService;
+import com.packid.api.service.AuthenticatedUserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
@@ -23,16 +24,23 @@ import java.util.UUID;
 public class AppUserController {
 
     private final AppUserService service;
+    private final AuthenticatedUserService authenticatedUserService;
 
-    public AppUserController(AppUserService service) {
+    public AppUserController(AppUserService service, AuthenticatedUserService authenticatedUserService) {
         this.service = service;
+        this.authenticatedUserService = authenticatedUserService;
     }
 
     @GetMapping("/me")
     public Map<String, Object> me(@AuthenticationPrincipal OidcUser user) {
+        com.packid.api.domain.model.AppUser appUser = authenticatedUserService.requireAppUser(user);
+        String displayName = user.getFullName();
+        if (displayName == null || displayName.isBlank()) displayName = appUser.getFullName();
+        if (displayName == null || displayName.isBlank()) displayName = appUser.getEmail();
         return Map.of(
-                "name", user.getFullName(),
-                "email", user.getEmail()
+                "name", displayName,
+                "email", appUser.getEmail(),
+                "role", appUser.getRole()
         );
     }
 

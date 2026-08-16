@@ -8,6 +8,7 @@ import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.repository.ApartmentOccupancyRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
+import com.packid.api.service.notification.UnitChangeNotificationPublisher;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,15 +26,18 @@ public class ApartmentOccupancyService {
     private final ApartmentOccupancyRepository repository;
     private final RegistryEntryRepository registryEntryRepository;
     private final AuthenticatedUserService authenticatedUserService;
+    private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
 
     public ApartmentOccupancyService(
             ApartmentOccupancyRepository repository,
             RegistryEntryRepository registryEntryRepository,
-            AuthenticatedUserService authenticatedUserService
+            AuthenticatedUserService authenticatedUserService,
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher
     ) {
         this.repository = repository;
         this.registryEntryRepository = registryEntryRepository;
         this.authenticatedUserService = authenticatedUserService;
+        this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
     }
 
     public List<ApartmentOccupancyResponse> list(OidcUser oidcUser, String block, String apartment) {
@@ -41,7 +46,11 @@ public class ApartmentOccupancyService {
                 .stream().map(this::toResponse).toList();
     }
 
+    @Transactional
     public List<ApartmentOccupancy> listByUnit(AppUser appUser, String block, String apartment) {
+        // Ao chegar a data de uma ocupação agendada, ela passa a ser a ocupação ativa
+        // assim que a unidade for consultada.
+        findActive(appUser, block, apartment);
         return repository.findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByStartDateDescCreatedAtDesc(
                 appUser.getTenantId(), block, apartment);
     }
@@ -52,8 +61,22 @@ public class ApartmentOccupancyService {
     }
 
     public ApartmentOccupancy findActive(AppUser appUser, String block, String apartment) {
-        return repository.findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndDeletedFalse(
-                appUser.getTenantId(), block, apartment, ApartmentOccupancy.Status.ACTIVE).orElse(null);
+        ApartmentOccupancy active = repository
+                .findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndDeletedFalse(
+                        appUser.getTenantId(), block, apartment, ApartmentOccupancy.Status.ACTIVE)
+                .orElse(null);
+        if (active != null) return active;
+
+        ApartmentOccupancy scheduled = repository
+                .findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndStartDateLessThanEqualAndDeletedFalseOrderByStartDateAsc(
+                        appUser.getTenantId(), block, apartment, ApartmentOccupancy.Status.SCHEDULED, LocalDate.now())
+                .orElse(null);
+        if (scheduled != null) {
+            scheduled.setStatus(ApartmentOccupancy.Status.ACTIVE);
+            scheduled.setUpdatedBy(actor(appUser));
+            return repository.save(scheduled);
+        }
+        return null;
     }
 
     @Transactional
@@ -66,6 +89,19 @@ public class ApartmentOccupancyService {
                 request.startDate() == null ? LocalDate.now() : request.startDate(),
                 clean(request.notes())
         );
+        String statusText = created.getStatus() == ApartmentOccupancy.Status.SCHEDULED ? "agendada" : "iniciada";
+        unitChangeNotificationPublisher.publish(
+                appUser.getTenantId(),
+                created.getBlock(),
+                created.getApartment(),
+                List.of(),
+                "OCCUPANCY_STARTED",
+                "Nova ocupação " + statusText,
+                "A nova ocupação foi " + statusText + " para "
+                        + created.getStartDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        + (created.getNotes() == null ? "." : ". Observação: " + created.getNotes()),
+                actor(appUser)
+        );
         return toResponse(created);
     }
 
@@ -75,6 +111,18 @@ public class ApartmentOccupancyService {
         String cleanedApartment = required(apartment, "Apartamento é obrigatório.");
         ApartmentOccupancy active = findActive(appUser, cleanedBlock, cleanedApartment);
         if (active != null) return active;
+
+        ApartmentOccupancy scheduled = repository
+                .findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndDeletedFalse(
+                        appUser.getTenantId(), cleanedBlock, cleanedApartment, ApartmentOccupancy.Status.SCHEDULED)
+                .orElse(null);
+        if (scheduled != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Existe uma ocupação agendada para esta unidade a partir de " + scheduled.getStartDate() + "."
+            );
+        }
+
         return startInternal(appUser, cleanedBlock, cleanedApartment, LocalDate.now(), null);
     }
 
@@ -103,6 +151,12 @@ public class ApartmentOccupancyService {
 
         List<RegistryEntry> entries = registryEntryRepository
                 .findAllByTenantIdAndOccupancyIdAndDeletedFalseOrderByNameAsc(appUser.getTenantId(), occupancy.getId());
+        List<String> residentEmails = entries.stream()
+                .filter(entry -> entry.getEntryType() == RegistryEntry.EntryType.RESIDENT)
+                .filter(entry -> Boolean.TRUE.equals(entry.getActive()))
+                .map(RegistryEntry::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .toList();
         for (RegistryEntry entry : entries) {
             if (isOccupancyManagedType(entry.getEntryType()) && Boolean.TRUE.equals(entry.getActive())) {
                 entry.setActive(false);
@@ -110,6 +164,17 @@ public class ApartmentOccupancyService {
             }
         }
         registryEntryRepository.saveAll(entries);
+        unitChangeNotificationPublisher.publish(
+                appUser.getTenantId(),
+                block,
+                apartment,
+                residentEmails,
+                "OCCUPANCY_ENDED",
+                "Ocupação encerrada",
+                "A ocupação foi encerrada em " + endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        + ". Os condôminos, veículos, pets e bicicletas vinculados à ocupação foram inativados.",
+                actor(appUser)
+        );
         return toResponse(saved);
     }
 
@@ -124,8 +189,16 @@ public class ApartmentOccupancyService {
         if (active != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe uma ocupação ativa para esta unidade.");
         }
-        if (startDate.isAfter(LocalDate.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A data de entrada não pode estar no futuro.");
+
+        ApartmentOccupancy scheduled = repository
+                .findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndDeletedFalse(
+                        appUser.getTenantId(), block, apartment, ApartmentOccupancy.Status.SCHEDULED)
+                .orElse(null);
+        if (scheduled != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Já existe uma ocupação agendada para esta unidade a partir de " + scheduled.getStartDate() + "."
+            );
         }
 
         LocalDate latestEndDate = repository
@@ -136,10 +209,10 @@ public class ApartmentOccupancyService {
                 .map(ApartmentOccupancy::getEndDate)
                 .max(LocalDate::compareTo)
                 .orElse(null);
-        if (latestEndDate != null && !startDate.isAfter(latestEndDate)) {
+        if (latestEndDate != null && startDate.isBefore(latestEndDate)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "A nova ocupação deve começar depois do encerramento da ocupação anterior (" + latestEndDate + ")."
+                    "A nova ocupação não pode começar antes do encerramento da ocupação anterior (" + latestEndDate + ")."
             );
         }
 
@@ -148,7 +221,9 @@ public class ApartmentOccupancyService {
         occupancy.setBlock(block);
         occupancy.setApartment(apartment);
         occupancy.setStartDate(startDate);
-        occupancy.setStatus(ApartmentOccupancy.Status.ACTIVE);
+        occupancy.setStatus(startDate.isAfter(LocalDate.now())
+                ? ApartmentOccupancy.Status.SCHEDULED
+                : ApartmentOccupancy.Status.ACTIVE);
         occupancy.setNotes(notes);
         occupancy.setCreatedBy(actor(appUser));
         return repository.save(occupancy);

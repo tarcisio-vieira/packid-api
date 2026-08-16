@@ -47,7 +47,24 @@ public class GoogleDrivePhotoService {
             String block,
             String apartment
     ) {
-        String accessToken = accessToken(authorizedClient);
+        return uploadPhoto(accessToken(authorizedClient), tenantId, registryEntryId, entryType,
+                originalFilename, mimeType, bytes, block, apartment);
+    }
+
+    public DriveFile uploadPhoto(
+            String accessToken,
+            UUID tenantId,
+            UUID registryEntryId,
+            String entryType,
+            String originalFilename,
+            String mimeType,
+            byte[] bytes,
+            String block,
+            String apartment
+    ) {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
+        }
         String folderId = findOrCreatePhotoFolder(accessToken, block, apartment);
 
         String safeName = buildFileName(registryEntryId, originalFilename, mimeType);
@@ -95,7 +112,17 @@ public class GoogleDrivePhotoService {
             String driveFileId,
             String fallbackMimeType
     ) {
-        String accessToken = accessToken(authorizedClient);
+        return downloadPhoto(accessToken(authorizedClient), driveFileId, fallbackMimeType);
+    }
+
+    public PhotoContent downloadPhoto(
+            String accessToken,
+            String driveFileId,
+            String fallbackMimeType
+    ) {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
+        }
         try {
             ResponseEntity<byte[]> response = restClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -131,9 +158,14 @@ public class GoogleDrivePhotoService {
     }
 
     public void deletePhoto(OAuth2AuthorizedClient authorizedClient, String driveFileId) {
-        if (driveFileId == null || driveFileId.isBlank()) return;
+        deletePhoto(accessToken(authorizedClient), driveFileId);
+    }
 
-        String accessToken = accessToken(authorizedClient);
+    public void deletePhoto(String accessToken, String driveFileId) {
+        if (driveFileId == null || driveFileId.isBlank()) return;
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
+        }
         try {
             restClient.delete()
                     .uri("/drive/v3/files/{fileId}", driveFileId)

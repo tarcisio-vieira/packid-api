@@ -13,6 +13,8 @@ import com.packid.api.domain.model.Person;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
+import com.packid.api.service.notification.UnitChangeNotificationPublisher;
+import com.packid.api.integration.google.TenantGoogleAccountService;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -21,7 +23,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -34,6 +39,8 @@ public class RegistryEntryService {
     private final DeliveryRecordService deliveryRecordService;
     private final PackIdRepository packIdRepository;
     private final ApartmentOccupancyService occupancyService;
+    private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
+    private final TenantGoogleAccountService googleAccountService;
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
@@ -42,7 +49,9 @@ public class RegistryEntryService {
             VisitorVisitService visitorVisitService,
             DeliveryRecordService deliveryRecordService,
             PackIdRepository packIdRepository,
-            ApartmentOccupancyService occupancyService
+            ApartmentOccupancyService occupancyService,
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher,
+            TenantGoogleAccountService googleAccountService
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -51,6 +60,8 @@ public class RegistryEntryService {
         this.deliveryRecordService = deliveryRecordService;
         this.packIdRepository = packIdRepository;
         this.occupancyService = occupancyService;
+        this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
+        this.googleAccountService = googleAccountService;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -160,6 +171,7 @@ public class RegistryEntryService {
 
         RegistryEntry entry = findReusableAccessPerson(appUser, request);
         boolean existing = entry != null;
+        EntrySnapshot before = existing ? snapshot(entry) : null;
         if (!existing) {
             entry = new RegistryEntry();
             entry.setTenantId(appUser.getTenantId());
@@ -173,7 +185,13 @@ public class RegistryEntryService {
             entry.setUpdatedBy(actor(appUser));
         }
 
-        return toResponse(repository.save(entry), appUser);
+        RegistryEntry saved = repository.save(entry);
+        if (existing) {
+            notifyUpdated(appUser, before, saved);
+        } else {
+            notifyCreated(appUser, saved);
+        }
+        return toResponse(saved, appUser);
     }
 
     @Transactional
@@ -182,11 +200,14 @@ public class RegistryEntryService {
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
 
+        EntrySnapshot before = snapshot(entry);
         apply(entry, request);
         syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
         entry.setUpdatedBy(actor(appUser));
-        return toResponse(repository.save(entry), appUser);
+        RegistryEntry saved = repository.save(entry);
+        notifyUpdated(appUser, before, saved);
+        return toResponse(saved, appUser);
     }
 
     @Transactional
@@ -195,10 +216,12 @@ public class RegistryEntryService {
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
 
+        EntrySnapshot before = snapshot(entry);
         entry.setDeleted(true);
         entry.setDeletedAt(LocalDateTime.now());
         entry.setDeletedBy(actor(appUser));
         repository.save(entry);
+        notifyDeleted(appUser, before);
     }
 
     private RegistryEntry findReusableAccessPerson(AppUser appUser, RegistryEntryRequest request) {
@@ -330,6 +353,210 @@ public class RegistryEntryService {
         entry.setPersonId(saved.getId());
     }
 
+    private void notifyCreated(AppUser appUser, RegistryEntry entry) {
+        if (!occupancyService.isOccupancyManagedType(entry.getEntryType())) return;
+        if (!Boolean.TRUE.equals(entry.getActive())) return;
+        unitChangeNotificationPublisher.publish(
+                appUser.getTenantId(),
+                entry.getBlock(),
+                entry.getApartment(),
+                residentExtra(entry.getEntryType(), entry.getEmail()),
+                "REGISTRY_CREATED",
+                label(entry.getEntryType()) + " incluído",
+                "Foi incluído " + labelLower(entry.getEntryType()) + " \"" + entry.getName() + "\" na unidade.",
+                actor(appUser)
+        );
+    }
+
+    private void notifyUpdated(AppUser appUser, EntrySnapshot before, RegistryEntry after) {
+        if (before == null) return;
+        boolean oldManaged = occupancyService.isOccupancyManagedType(before.entryType());
+        boolean newManaged = occupancyService.isOccupancyManagedType(after.getEntryType());
+        if (!oldManaged && !newManaged) return;
+
+        boolean sameUnit = sameUnit(before.block(), before.apartment(), after.getBlock(), after.getApartment());
+        if (!sameUnit) {
+            if (oldManaged) {
+                unitChangeNotificationPublisher.publish(
+                        appUser.getTenantId(),
+                        before.block(),
+                        before.apartment(),
+                        residentExtra(before.entryType(), before.email()),
+                        "REGISTRY_MOVED_FROM",
+                        label(before.entryType()) + " transferido de unidade",
+                        "O cadastro \"" + before.name() + "\" foi transferido desta unidade.",
+                        actor(appUser)
+                );
+            }
+            if (newManaged && Boolean.TRUE.equals(after.getActive())) {
+                unitChangeNotificationPublisher.publish(
+                        appUser.getTenantId(),
+                        after.getBlock(),
+                        after.getApartment(),
+                        residentExtra(after.getEntryType(), after.getEmail()),
+                        "REGISTRY_MOVED_TO",
+                        label(after.getEntryType()) + " vinculado à unidade",
+                        "O cadastro \"" + after.getName() + "\" foi vinculado a esta unidade.",
+                        actor(appUser)
+                );
+            }
+            return;
+        }
+
+        String title;
+        String details;
+        if (Boolean.TRUE.equals(before.active()) && !Boolean.TRUE.equals(after.getActive())) {
+            title = label(before.entryType()) + " inativado";
+            details = "O cadastro \"" + before.name() + "\" foi inativado.";
+        } else if (!Boolean.TRUE.equals(before.active()) && Boolean.TRUE.equals(after.getActive())) {
+            title = label(after.getEntryType()) + " reativado";
+            details = "O cadastro \"" + after.getName() + "\" foi reativado.";
+        } else {
+            List<String> fields = changedFields(before, after);
+            if (fields.isEmpty()) return;
+            title = label(after.getEntryType()) + " atualizado";
+            details = "O cadastro \"" + after.getName() + "\" foi atualizado. Campos alterados: "
+                    + String.join(", ", fields) + ".";
+        }
+
+        Collection<String> extras = new ArrayList<>();
+        if (before.entryType() == EntryType.RESIDENT
+                && Boolean.TRUE.equals(before.active())
+                && !Boolean.TRUE.equals(after.getActive())
+                && before.email() != null) {
+            // Na inativação, o morador deixa de aparecer na consulta de ativos antes do evento ser enviado.
+            // Mantemos o e-mail anterior apenas para que ele também receba a confirmação da própria saída.
+            extras.add(before.email());
+        }
+        if (after.getEntryType() == EntryType.RESIDENT
+                && Boolean.TRUE.equals(after.getActive())
+                && after.getEmail() != null) {
+            extras.add(after.getEmail());
+        }
+
+        unitChangeNotificationPublisher.publish(
+                appUser.getTenantId(),
+                after.getBlock() != null ? after.getBlock() : before.block(),
+                after.getApartment() != null ? after.getApartment() : before.apartment(),
+                extras,
+                "REGISTRY_UPDATED",
+                title,
+                details,
+                actor(appUser)
+        );
+    }
+
+    private void notifyDeleted(AppUser appUser, EntrySnapshot before) {
+        if (before == null || !occupancyService.isOccupancyManagedType(before.entryType())) return;
+        unitChangeNotificationPublisher.publish(
+                appUser.getTenantId(),
+                before.block(),
+                before.apartment(),
+                residentExtra(before.entryType(), before.email()),
+                "REGISTRY_DELETED",
+                label(before.entryType()) + " removido",
+                "O cadastro \"" + before.name() + "\" foi removido da unidade.",
+                actor(appUser)
+        );
+    }
+
+    private Collection<String> residentExtra(EntryType type, String email) {
+        if (type == EntryType.RESIDENT && clean(email) != null) return List.of(email.trim());
+        return List.of();
+    }
+
+    private List<String> changedFields(EntrySnapshot before, RegistryEntry after) {
+        List<String> fields = new ArrayList<>();
+        addChanged(fields, "nome/descrição", before.name(), after.getName());
+        addChanged(fields, "documento/identificação", before.document(), after.getDocument());
+        addChanged(fields, "telefone", before.phone(), after.getPhone());
+        addChanged(fields, "e-mail", before.email(), after.getEmail());
+        addChanged(fields, "empresa", before.company(), after.getCompany());
+        addChanged(fields, "responsável", before.ownerName(), after.getOwnerName());
+        addChanged(fields, "marca", before.brand(), after.getBrand());
+        addChanged(fields, "modelo", before.model(), after.getModel());
+        addChanged(fields, "cor", before.color(), after.getColor());
+        addChanged(fields, "identificação/placa", before.identifier(), after.getIdentifier());
+        addChanged(fields, "espécie", before.species(), after.getSpecies());
+        addChanged(fields, "raça", before.breed(), after.getBreed());
+        addChanged(fields, "vaga", before.parkingSpace(), after.getParkingSpace());
+        addChanged(fields, "observação", before.notes(), after.getNotes());
+        if (!Objects.equals(before.entryType(), after.getEntryType())) fields.add("tipo de cadastro");
+        return fields;
+    }
+
+    private void addChanged(List<String> fields, String label, Object before, Object after) {
+        if (!Objects.equals(normalize(before), normalize(after))) fields.add(label);
+    }
+
+    private Object normalize(Object value) {
+        if (value instanceof String text) return clean(text);
+        return value;
+    }
+
+    private EntrySnapshot snapshot(RegistryEntry entry) {
+        return new EntrySnapshot(
+                entry.getEntryType(), entry.getName(), entry.getDocument(), entry.getPhone(), entry.getEmail(),
+                entry.getBlock(), entry.getApartment(), entry.getCompany(), entry.getOwnerName(), entry.getBrand(),
+                entry.getModel(), entry.getColor(), entry.getIdentifier(), entry.getSpecies(), entry.getBreed(),
+                entry.getParkingSpace(), entry.getNotes(), entry.getActive()
+        );
+    }
+
+    private boolean sameUnit(String blockA, String apartmentA, String blockB, String apartmentB) {
+        return Objects.equals(lowerClean(blockA), lowerClean(blockB))
+                && Objects.equals(lowerClean(apartmentA), lowerClean(apartmentB));
+    }
+
+    private String lowerClean(String value) {
+        String cleaned = clean(value);
+        return cleaned == null ? null : cleaned.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private String label(EntryType type) {
+        return switch (type) {
+            case RESIDENT -> "Condômino";
+            case BICYCLE -> "Bicicleta";
+            case PET -> "Pet";
+            case VEHICLE -> "Veículo";
+            case DELIVERY_PERSON -> "Entregador";
+            case VISITOR -> "Visitante";
+        };
+    }
+
+    private String labelLower(EntryType type) {
+        return switch (type) {
+            case RESIDENT -> "o condômino";
+            case BICYCLE -> "a bicicleta";
+            case PET -> "o pet";
+            case VEHICLE -> "o veículo";
+            case DELIVERY_PERSON -> "o entregador";
+            case VISITOR -> "o visitante";
+        };
+    }
+
+    private record EntrySnapshot(
+            EntryType entryType,
+            String name,
+            String document,
+            String phone,
+            String email,
+            String block,
+            String apartment,
+            String company,
+            String ownerName,
+            String brand,
+            String model,
+            String color,
+            String identifier,
+            String species,
+            String breed,
+            String parkingSpace,
+            String notes,
+            Boolean active
+    ) {
+    }
+
     public RegistryEntryResponse toResponse(RegistryEntry entry, AppUser appUser) {
         return new RegistryEntryResponse(
                 entry.getId(),
@@ -353,7 +580,8 @@ public class RegistryEntryService {
                 entry.getParkingSpace(),
                 entry.getNotes(),
                 entry.getPhotoDriveFileId() != null && !entry.getPhotoDriveFileId().isBlank(),
-                sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail()),
+                sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())
+                        || sameEmail(entry.getPhotoOwnerEmail(), googleAccountService.getOfficialEmail(appUser.getTenantId())),
                 entry.getPhotoFileName(),
                 entry.getActive(),
                 entry.getCreatedAt(),

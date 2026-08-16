@@ -45,6 +45,24 @@ public class Condominium extends AuditableEntity {
     @Column(name = "zip_code", length = 20)
     private String zipCode;
 
+    @Column(name = "document_number", length = 30)
+    private String documentNumber;
+
+    @Column(name = "phone", length = 30)
+    private String phone;
+
+    @Column(name = "email", length = 160)
+    private String email;
+
+    @Column(name = "manager_name", length = 160)
+    private String managerName;
+
+    @Column(name = "whatsapp", length = 30)
+    private String whatsapp;
+
+    @Column(name = "notes", length = 1000)
+    private String notes;
+
     @PrePersist
     void syncTenant() {
         if (tenantId == null && tenant != null) {

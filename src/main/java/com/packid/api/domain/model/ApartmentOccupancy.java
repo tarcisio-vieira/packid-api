@@ -42,6 +42,7 @@ public class ApartmentOccupancy extends AuditableEntity {
 
     public enum Status {
         ACTIVE,
+        SCHEDULED,
         ENDED
     }
 }

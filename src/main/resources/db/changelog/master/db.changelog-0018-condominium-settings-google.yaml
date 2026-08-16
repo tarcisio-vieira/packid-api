@@ -1,0 +1,82 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0018-condominium-settings-google
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: condominium
+            columns:
+              - column: { name: document_number, type: varchar(30) }
+              - column: { name: phone, type: varchar(30) }
+              - column: { name: email, type: varchar(160) }
+              - column: { name: manager_name, type: varchar(160) }
+              - column: { name: whatsapp, type: varchar(30) }
+              - column: { name: notes, type: varchar(1000) }
+
+        - createTable:
+            tableName: tenant_google_account
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints: { primaryKey: true, nullable: false }
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints: { nullable: false }
+              - column:
+                  name: email
+                  type: varchar(160)
+                  constraints: { nullable: false }
+              - column: { name: provider_subject, type: varchar(255) }
+              - column: { name: refresh_token_encrypted, type: text }
+              - column:
+                  name: drive_enabled
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints: { nullable: false }
+              - column:
+                  name: gmail_enabled
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints: { nullable: false }
+              - column: { name: connected_at, type: timestamp }
+              - column: { name: last_refresh_at, type: timestamp }
+              - column: { name: last_error, type: varchar(1000) }
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints: { nullable: false }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints: { nullable: false }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints: { nullable: false }
+
+        - addForeignKeyConstraint:
+            baseTableName: tenant_google_account
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_tenant_google_account_tenant
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: tenant_google_account
+            columnNames: tenant_id
+            constraintName: uq_tenant_google_account_tenant
+
+        - createIndex:
+            tableName: tenant_google_account
+            indexName: idx_tenant_google_account_email
+            columns:
+              - column: { name: email }

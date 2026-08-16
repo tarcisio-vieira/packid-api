@@ -20,4 +20,4 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 app:
-  frontend-url: "http://localhost:5173"
+  frontend-url: "http://localhost:5173/packid/"

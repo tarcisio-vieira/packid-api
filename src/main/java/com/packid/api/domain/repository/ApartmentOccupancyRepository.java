@@ -19,6 +19,15 @@ public interface ApartmentOccupancyRepository extends JpaRepository<ApartmentOcc
             ApartmentOccupancy.Status status
     );
 
+
+    Optional<ApartmentOccupancy> findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndStartDateLessThanEqualAndDeletedFalseOrderByStartDateAsc(
+            UUID tenantId,
+            String block,
+            String apartment,
+            ApartmentOccupancy.Status status,
+            java.time.LocalDate startDate
+    );
+
     List<ApartmentOccupancy> findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByStartDateDescCreatedAtDesc(
             UUID tenantId,
             String block,
