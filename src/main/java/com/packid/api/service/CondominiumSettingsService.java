@@ -75,6 +75,7 @@ public class CondominiumSettingsService {
         condominium.setManagerName(clean(request.managerName()));
         condominium.setWhatsapp(clean(request.whatsapp()));
         condominium.setNotes(clean(request.notes()));
+        condominium.setEmailNotificationsEnabled(!Boolean.FALSE.equals(request.emailNotificationsEnabled()));
         condominiumRepository.save(condominium);
 
         return responseFor(appUser);
@@ -134,6 +135,7 @@ public class CondominiumSettingsService {
                 c == null ? null : c.getManagerName(),
                 c == null ? null : c.getWhatsapp(),
                 c == null ? null : c.getNotes(),
+                c == null || !Boolean.FALSE.equals(c.getEmailNotificationsEnabled()),
                 google
         );
     }

@@ -1,5 +1,6 @@
 package com.packid.api.config;
 
+import java.net.URI;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -19,8 +20,11 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // origem do front (React) – precisa ser exata
-        config.setAllowedOrigins(List.of(frontendUrl));
+        // O header Origin enviado pelo navegador nunca contém path.
+        // Ex.: para http://localhost:5173/packid/ o Origin é http://localhost:5173.
+        // app.frontend-url continua podendo conter /packid/ porque também é usado
+        // no redirect após o login OAuth.
+        config.setAllowedOrigins(List.of(extractOrigin(frontendUrl)));
 
         // métodos permitidos (inclui OPTIONS pro preflight)
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
@@ -29,7 +33,9 @@ public class CorsConfig {
         config.setAllowedHeaders(List.of(
                 "Authorization",
                 "Content-Type",
-                "X-Requested-With"
+                "X-Requested-With",
+                "X-Actor",
+                "Accept"
         ));
 
         // importante: como o front usa credentials: "include"
@@ -39,4 +45,13 @@ public class CorsConfig {
         source.registerCorsConfiguration("/**", config);
         return source;
     }
+
+    private String extractOrigin(String url) {
+        URI uri = URI.create(url);
+        if (uri.getScheme() == null || uri.getAuthority() == null) {
+            throw new IllegalArgumentException("app.frontend-url deve ser uma URL absoluta: " + url);
+        }
+        return uri.getScheme() + "://" + uri.getAuthority();
+    }
 }
+

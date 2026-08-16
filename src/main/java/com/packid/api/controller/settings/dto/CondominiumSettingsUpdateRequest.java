@@ -18,5 +18,6 @@ public record CondominiumSettingsUpdateRequest(
         @Email(message = "Informe um e-mail válido.") @Size(max = 160) String email,
         @Size(max = 160) String managerName,
         @Size(max = 30) String whatsapp,
-        @Size(max = 1000) String notes
+        @Size(max = 1000) String notes,
+        Boolean emailNotificationsEnabled
 ) {}

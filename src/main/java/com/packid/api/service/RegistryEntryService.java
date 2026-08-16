@@ -13,6 +13,7 @@ import com.packid.api.domain.model.Person;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
+import com.packid.api.domain.repository.ServiceCompanyRepository;
 import com.packid.api.service.notification.UnitChangeNotificationPublisher;
 import com.packid.api.integration.google.TenantGoogleAccountService;
 import jakarta.transaction.Transactional;
@@ -41,6 +42,8 @@ public class RegistryEntryService {
     private final ApartmentOccupancyService occupancyService;
     private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
     private final TenantGoogleAccountService googleAccountService;
+    private final ServiceRecordService serviceRecordService;
+    private final ServiceCompanyRepository serviceCompanyRepository;
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
@@ -51,7 +54,9 @@ public class RegistryEntryService {
             PackIdRepository packIdRepository,
             ApartmentOccupancyService occupancyService,
             UnitChangeNotificationPublisher unitChangeNotificationPublisher,
-            TenantGoogleAccountService googleAccountService
+            TenantGoogleAccountService googleAccountService,
+            ServiceRecordService serviceRecordService,
+            ServiceCompanyRepository serviceCompanyRepository
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -62,6 +67,8 @@ public class RegistryEntryService {
         this.occupancyService = occupancyService;
         this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
         this.googleAccountService = googleAccountService;
+        this.serviceRecordService = serviceRecordService;
+        this.serviceCompanyRepository = serviceCompanyRepository;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -70,14 +77,16 @@ public class RegistryEntryService {
                 ? repository.findAllByTenantIdAndDeletedFalseOrderByNameAsc(appUser.getTenantId())
                 : repository.findAllByTenantIdAndEntryTypeAndDeletedFalseOrderByNameAsc(appUser.getTenantId(), entryType);
 
-        return entries.stream().map(entry -> toResponse(entry, appUser)).toList();
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
+        return entries.stream().map(entry -> toResponse(entry, appUser, officialGoogleEmail)).toList();
     }
 
     public RegistryEntryResponse getById(OidcUser oidcUser, UUID id) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
-        return toResponse(entry, appUser);
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
+        return toResponse(entry, appUser, officialGoogleEmail);
     }
 
     public UnitRegistrySummaryResponse getUnitSummary(OidcUser oidcUser, String block, String apartment, UUID occupancyId) {
@@ -123,18 +132,20 @@ public class RegistryEntryService {
         LocalDateTime finalTo = to;
         ApartmentOccupancyResponse selectedResponse = occupancyService.toResponse(selectedOccupancy);
         List<ApartmentOccupancyResponse> occupancyResponses = occupancies.stream().map(occupancyService::toResponse).toList();
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
 
         return new UnitRegistrySummaryResponse(
                 cleanedBlock,
                 cleanedApartment,
                 selectedResponse,
                 occupancyResponses,
-                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.RESIDENT).map(e -> toResponse(e, appUser)).toList(),
-                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.BICYCLE).map(e -> toResponse(e, appUser)).toList(),
-                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.VEHICLE).map(e -> toResponse(e, appUser)).toList(),
-                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.PET).map(e -> toResponse(e, appUser)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.RESIDENT).map(e -> toResponse(e, appUser, officialGoogleEmail)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.BICYCLE).map(e -> toResponse(e, appUser, officialGoogleEmail)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.VEHICLE).map(e -> toResponse(e, appUser, officialGoogleEmail)).toList(),
+                unitEntries.stream().filter(e -> e.getEntryType() == EntryType.PET).map(e -> toResponse(e, appUser, officialGoogleEmail)).toList(),
                 visitorVisitService.getByUnit(appUser, cleanedBlock, cleanedApartment, finalFrom, finalTo),
                 deliveryRecordService.getByUnit(appUser, cleanedBlock, cleanedApartment, finalFrom, finalTo),
+                serviceRecordService.getByUnit(appUser, cleanedBlock, cleanedApartment, finalFrom, finalTo),
                 packIdRepository.findByUnit(
                                 appUser.getTenantId(),
                                 cleanedBlock,
@@ -168,6 +179,10 @@ public class RegistryEntryService {
     @Transactional
     public RegistryEntryResponse create(OidcUser oidcUser, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        // Resolve a conta oficial antes de persistir/alterar RegistryEntry. Assim evitamos
+        // consultas adicionais que provoquem auto-flush enquanto uma nova entidade ainda
+        // está sendo processada pelo Hibernate.
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
 
         RegistryEntry entry = findReusableAccessPerson(appUser, request);
         boolean existing = entry != null;
@@ -179,6 +194,7 @@ public class RegistryEntryService {
         }
 
         apply(entry, request);
+        syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
         if (existing) {
@@ -191,23 +207,25 @@ public class RegistryEntryService {
         } else {
             notifyCreated(appUser, saved);
         }
-        return toResponse(saved, appUser);
+        return toResponse(saved, appUser, officialGoogleEmail);
     }
 
     @Transactional
     public RegistryEntryResponse update(OidcUser oidcUser, UUID id, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
 
         EntrySnapshot before = snapshot(entry);
         apply(entry, request);
+        syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
         entry.setUpdatedBy(actor(appUser));
         RegistryEntry saved = repository.save(entry);
         notifyUpdated(appUser, before, saved);
-        return toResponse(saved, appUser);
+        return toResponse(saved, appUser, officialGoogleEmail);
     }
 
     @Transactional
@@ -225,7 +243,9 @@ public class RegistryEntryService {
     }
 
     private RegistryEntry findReusableAccessPerson(AppUser appUser, RegistryEntryRequest request) {
-        if (request.entryType() != EntryType.VISITOR && request.entryType() != EntryType.DELIVERY_PERSON) {
+        if (request.entryType() != EntryType.VISITOR
+                && request.entryType() != EntryType.DELIVERY_PERSON
+                && request.entryType() != EntryType.SERVICE_PROVIDER) {
             return null;
         }
         String document = clean(request.document());
@@ -244,6 +264,7 @@ public class RegistryEntryService {
         entry.setBlock(clean(request.block()));
         entry.setApartment(clean(request.apartment()));
         entry.setCompany(clean(request.company()));
+        entry.setServiceCompanyId(request.serviceCompanyId());
         entry.setOwnerName(clean(request.ownerName()));
         entry.setBrand(clean(request.brand()));
         entry.setModel(clean(request.model()));
@@ -266,6 +287,22 @@ public class RegistryEntryService {
                     "Para cadastros vinculados à ocupação, informe bloco e apartamento."
             );
         }
+    }
+
+    private void syncServiceCompany(AppUser appUser, RegistryEntry entry) {
+        if (entry.getEntryType() != EntryType.SERVICE_PROVIDER) {
+            entry.setServiceCompanyId(null);
+            return;
+        }
+        if (entry.getServiceCompanyId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione a empresa do prestador de serviço.");
+        }
+        var company = serviceCompanyRepository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), entry.getServiceCompanyId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Empresa prestadora não encontrada."));
+        if (!Boolean.TRUE.equals(company.getActive())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A empresa prestadora selecionada está inativa.");
+        }
+        entry.setCompany(company.getName());
     }
 
     private void syncOccupancy(AppUser appUser, RegistryEntry entry) {
@@ -521,6 +558,7 @@ public class RegistryEntryService {
             case VEHICLE -> "Veículo";
             case DELIVERY_PERSON -> "Entregador";
             case VISITOR -> "Visitante";
+            case SERVICE_PROVIDER -> "Prestador de serviço";
         };
     }
 
@@ -532,6 +570,7 @@ public class RegistryEntryService {
             case VEHICLE -> "o veículo";
             case DELIVERY_PERSON -> "o entregador";
             case VISITOR -> "o visitante";
+            case SERVICE_PROVIDER -> "o prestador de serviço";
         };
     }
 
@@ -558,6 +597,11 @@ public class RegistryEntryService {
     }
 
     public RegistryEntryResponse toResponse(RegistryEntry entry, AppUser appUser) {
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
+        return toResponse(entry, appUser, officialGoogleEmail);
+    }
+
+    private RegistryEntryResponse toResponse(RegistryEntry entry, AppUser appUser, String officialGoogleEmail) {
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),
@@ -570,6 +614,8 @@ public class RegistryEntryService {
                 entry.getBlock(),
                 entry.getApartment(),
                 entry.getCompany(),
+                entry.getServiceCompanyId(),
+                entry.getCompany(),
                 entry.getOwnerName(),
                 entry.getBrand(),
                 entry.getModel(),
@@ -581,8 +627,14 @@ public class RegistryEntryService {
                 entry.getNotes(),
                 entry.getPhotoDriveFileId() != null && !entry.getPhotoDriveFileId().isBlank(),
                 sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())
-                        || sameEmail(entry.getPhotoOwnerEmail(), googleAccountService.getOfficialEmail(appUser.getTenantId())),
+                        || sameEmail(entry.getPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getPhotoFileName(),
+                entry.getCpfPhotoDriveFileId() != null && !entry.getCpfPhotoDriveFileId().isBlank(),
+                sameEmail(entry.getCpfPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getCpfPhotoOwnerEmail(), officialGoogleEmail),
+                entry.getCpfPhotoFileName(),
+                entry.getRgPhotoDriveFileId() != null && !entry.getRgPhotoDriveFileId().isBlank(),
+                sameEmail(entry.getRgPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getRgPhotoOwnerEmail(), officialGoogleEmail),
+                entry.getRgPhotoFileName(),
                 entry.getActive(),
                 entry.getCreatedAt(),
                 entry.getUpdatedAt()

@@ -51,13 +51,42 @@ public class GoogleGmailService {
                     .body(Map.of("raw", raw))
                     .retrieve()
                     .toBodilessEntity();
+            googleAccountService.recordGmailSuccess(tenantId);
         } catch (RestClientResponseException ex) {
-            if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
-                throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
-                        "O Gmail da conta oficial não autorizou o envio. Reconecte a conta Google em Configurações.", ex);
+            String googleBody = ex.getResponseBodyAsString();
+            String normalized = googleBody == null ? "" : googleBody.toLowerCase();
+
+            if (normalized.contains("service_disabled")
+                    || normalized.contains("accessnotconfigured")
+                    || (normalized.contains("gmail.googleapis.com") && normalized.contains("disabled"))) {
+                String message = "A Gmail API não está habilitada no projeto Google Cloud usado pelo VSGI. Habilite a Gmail API no mesmo projeto do GOOGLE_CLIENT_ID e depois use 'Testar Gmail' em Configurações.";
+                googleAccountService.recordGoogleError(tenantId, message, false);
+                throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, message, ex);
             }
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "Não foi possível enviar a notificação pelo Gmail.", ex);
+
+            if (normalized.contains("access_token_scope_insufficient")
+                    || normalized.contains("insufficient authentication scopes")
+                    || normalized.contains("insufficientpermissions")) {
+                String message = "A conta Google oficial não concedeu a permissão gmail.send. Reconecte a conta em Configurações e aceite a permissão para o VSGI enviar e-mails.";
+                googleAccountService.recordGoogleError(tenantId, message, true);
+                throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, message, ex);
+            }
+
+            if (ex.getStatusCode().value() == 401) {
+                String message = "A autorização da conta Google oficial expirou ou foi revogada. Reconecte a conta Google em Configurações.";
+                googleAccountService.recordGoogleError(tenantId, message, true);
+                throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, message, ex);
+            }
+
+            if (ex.getStatusCode().value() == 403) {
+                String message = "O Google recusou o envio pelo Gmail. Verifique se a Gmail API está habilitada e se a conta oficial concedeu a permissão de envio.";
+                googleAccountService.recordGoogleError(tenantId, message, false);
+                throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, message, ex);
+            }
+
+            String message = "Não foi possível enviar a notificação pelo Gmail (HTTP " + ex.getStatusCode().value() + ").";
+            googleAccountService.recordGoogleError(tenantId, message, false);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, message, ex);
         }
     }
 

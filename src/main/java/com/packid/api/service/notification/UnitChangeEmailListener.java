@@ -59,7 +59,7 @@ public class UnitChangeEmailListener {
                 .filter(name -> name != null && !name.isBlank())
                 .orElse("Condomínio");
 
-        String subject = "VSGI Condomínio - " + condominiumName + " - Bloco "
+        String subject = "VSGI Condomínio - " + event.title() + " - Bloco "
                 + event.block() + " / Apto " + event.apartment();
 
         for (String recipient : event.recipients()) {

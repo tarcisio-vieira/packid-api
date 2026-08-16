@@ -65,6 +65,13 @@ public class RegistryEntry extends AuditableEntity {
     @Column(name = "company", length = 150)
     private String company;
 
+    @Column(name = "service_company_id", columnDefinition = "uuid")
+    private UUID serviceCompanyId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "service_company_id", insertable = false, updatable = false)
+    private ServiceCompany serviceCompany;
+
     @Column(name = "owner_name", length = 200)
     private String ownerName;
 
@@ -106,6 +113,24 @@ public class RegistryEntry extends AuditableEntity {
     @Column(name = "photo_owner_email", length = 255)
     private String photoOwnerEmail;
 
+    @Column(name = "cpf_photo_drive_file_id", length = 255)
+    private String cpfPhotoDriveFileId;
+    @Column(name = "cpf_photo_mime_type", length = 100)
+    private String cpfPhotoMimeType;
+    @Column(name = "cpf_photo_file_name", length = 255)
+    private String cpfPhotoFileName;
+    @Column(name = "cpf_photo_owner_email", length = 255)
+    private String cpfPhotoOwnerEmail;
+
+    @Column(name = "rg_photo_drive_file_id", length = 255)
+    private String rgPhotoDriveFileId;
+    @Column(name = "rg_photo_mime_type", length = 100)
+    private String rgPhotoMimeType;
+    @Column(name = "rg_photo_file_name", length = 255)
+    private String rgPhotoFileName;
+    @Column(name = "rg_photo_owner_email", length = 255)
+    private String rgPhotoOwnerEmail;
+
     @Column(name = "active", nullable = false)
     private Boolean active = true;
 
@@ -115,6 +140,7 @@ public class RegistryEntry extends AuditableEntity {
         VISITOR,
         BICYCLE,
         PET,
-        VEHICLE
+        VEHICLE,
+        SERVICE_PROVIDER
     }
 }

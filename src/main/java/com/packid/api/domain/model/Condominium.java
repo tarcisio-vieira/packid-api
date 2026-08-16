@@ -63,6 +63,9 @@ public class Condominium extends AuditableEntity {
     @Column(name = "notes", length = 1000)
     private String notes;
 
+    @Column(name = "email_notifications_enabled", nullable = false)
+    private Boolean emailNotificationsEnabled = Boolean.TRUE;
+
     @PrePersist
     void syncTenant() {
         if (tenantId == null && tenant != null) {

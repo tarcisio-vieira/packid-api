@@ -20,10 +20,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class TenantGoogleAccountService {
+    public static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    public static final String DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
     private static final String GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
     private final TenantGoogleAccountRepository repository;
@@ -80,6 +83,16 @@ public class TenantGoogleAccountService {
         if (email == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A conta Google autenticada não informou um e-mail válido.");
+        }
+
+        Set<String> grantedScopes = authorizedClient.getAccessToken().getScopes();
+        if (grantedScopes == null || !grantedScopes.contains(DRIVE_FILE_SCOPE)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A permissão do Google Drive não foi concedida. Reconecte a conta e autorize o acesso aos arquivos criados pelo VSGI.");
+        }
+        if (!grantedScopes.contains(GMAIL_SEND_SCOPE)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A permissão para enviar e-mails pelo Gmail não foi concedida. Reconecte a conta Google e autorize o VSGI a enviar e-mails.");
         }
 
         TenantGoogleAccount account = repository.findByTenantIdAndDeletedFalse(tenantId)
@@ -141,6 +154,26 @@ public class TenantGoogleAccountService {
             account.setLastRefreshAt(null);
             account.setLastError(null);
             account.setUpdatedBy(actor(appUser));
+            repository.save(account);
+        });
+    }
+
+    @Transactional
+    public void recordGoogleError(UUID tenantId, String message, boolean disableGmail) {
+        repository.findByTenantIdAndDeletedFalse(tenantId).ifPresent(account -> {
+            account.setLastError(limit(message, 1000));
+            if (disableGmail) account.setGmailEnabled(false);
+            repository.save(account);
+        });
+    }
+
+    @Transactional
+    public void recordGmailSuccess(UUID tenantId) {
+        repository.findByTenantIdAndDeletedFalse(tenantId).ifPresent(account -> {
+            boolean changed = clean(account.getLastError()) != null || !Boolean.TRUE.equals(account.getGmailEnabled());
+            if (!changed) return;
+            account.setGmailEnabled(true);
+            account.setLastError(null);
             repository.save(account);
         });
     }

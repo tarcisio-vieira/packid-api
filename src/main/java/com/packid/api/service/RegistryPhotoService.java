@@ -17,36 +17,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.imageio.ImageIO;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class RegistryPhotoService {
     private static final Logger log = LoggerFactory.getLogger(RegistryPhotoService.class);
-    private static final long MAX_PHOTO_SIZE = 5L * 1024L * 1024L;
-    private static final Set<String> ALLOWED_MIME_TYPES = Set.of("image/jpeg", "image/png");
-
     private final RegistryEntryRepository repository;
     private final AuthenticatedUserService authenticatedUserService;
     private final GoogleDrivePhotoService googleDrivePhotoService;
     private final TenantGoogleAccountService googleAccountService;
     private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
+    private final ImageCompressionService imageCompressionService;
 
     public RegistryPhotoService(
             RegistryEntryRepository repository,
             AuthenticatedUserService authenticatedUserService,
             GoogleDrivePhotoService googleDrivePhotoService,
             TenantGoogleAccountService googleAccountService,
-            UnitChangeNotificationPublisher unitChangeNotificationPublisher
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher,
+            ImageCompressionService imageCompressionService
     ) {
         this.repository = repository;
         this.authenticatedUserService = authenticatedUserService;
         this.googleDrivePhotoService = googleDrivePhotoService;
         this.googleAccountService = googleAccountService;
         this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
+        this.imageCompressionService = imageCompressionService;
     }
 
     @Transactional
@@ -54,7 +50,7 @@ public class RegistryPhotoService {
                                 OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireEntry(appUser, entryId);
-        byte[] bytes = validateAndRead(file);
+        ImageCompressionService.ProcessedImage processed = imageCompressionService.process(file);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
         String uploadOwner = official == null ? clean(appUser.getEmail()) : clean(official.getEmail());
@@ -72,16 +68,16 @@ public class RegistryPhotoService {
         GoogleDrivePhotoService.DriveFile uploaded = officialToken != null
                 ? googleDrivePhotoService.uploadPhoto(
                         officialToken, appUser.getTenantId(), entry.getId(), entry.getEntryType().name(),
-                        file.getOriginalFilename(), file.getContentType(), bytes,
+                        processed.fileName(), processed.mimeType(), processed.bytes(),
                         entry.getBlock(), entry.getApartment())
                 : googleDrivePhotoService.uploadPhoto(
                         authorizedClient, appUser.getTenantId(), entry.getId(), entry.getEntryType().name(),
-                        file.getOriginalFilename(), file.getContentType(), bytes,
+                        processed.fileName(), processed.mimeType(), processed.bytes(),
                         entry.getBlock(), entry.getApartment());
 
         entry.setPhotoDriveFileId(uploaded.id());
-        entry.setPhotoMimeType(file.getContentType());
-        entry.setPhotoFileName(clean(file.getOriginalFilename()));
+        entry.setPhotoMimeType(processed.mimeType());
+        entry.setPhotoFileName(processed.fileName());
         entry.setPhotoOwnerEmail(uploadOwner);
         entry.setUpdatedBy(actor(appUser));
         RegistryEntry saved = repository.save(entry);
@@ -183,24 +179,6 @@ public class RegistryPhotoService {
         if (!sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Esta foto está armazenada em outra conta Google. Conecte a conta oficial do condomínio em Configurações.");
-        }
-    }
-
-    private byte[] validateAndRead(MultipartFile file) {
-        if (file == null || file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma foto.");
-        if (file.getSize() > MAX_PHOTO_SIZE) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A foto deve ter no máximo 5 MB.");
-        String mimeType = clean(file.getContentType());
-        if (mimeType == null || !ALLOWED_MIME_TYPES.contains(mimeType.toLowerCase())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use uma foto JPG ou PNG.");
-        }
-        try {
-            byte[] bytes = file.getBytes();
-            if (ImageIO.read(new ByteArrayInputStream(bytes)) == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O arquivo enviado não é uma imagem válida.");
-            }
-            return bytes;
-        } catch (IOException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não foi possível ler a foto enviada.", ex);
         }
     }
 

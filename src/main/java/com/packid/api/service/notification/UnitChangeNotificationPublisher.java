@@ -1,6 +1,6 @@
 package com.packid.api.service.notification;
 
-import com.packid.api.domain.model.RegistryEntry;
+import com.packid.api.domain.repository.CondominiumRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -16,13 +16,16 @@ import java.util.UUID;
 public class UnitChangeNotificationPublisher {
 
     private final RegistryEntryRepository registryEntryRepository;
+    private final CondominiumRepository condominiumRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     public UnitChangeNotificationPublisher(
             RegistryEntryRepository registryEntryRepository,
+            CondominiumRepository condominiumRepository,
             ApplicationEventPublisher applicationEventPublisher
     ) {
         this.registryEntryRepository = registryEntryRepository;
+        this.condominiumRepository = condominiumRepository;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -30,10 +33,8 @@ public class UnitChangeNotificationPublisher {
         LinkedHashSet<String> emails = new LinkedHashSet<>();
         if (tenantId != null && clean(block) != null && clean(apartment) != null) {
             registryEntryRepository
-                    .findAllByTenantIdAndEntryTypeAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
-                            tenantId, RegistryEntry.EntryType.RESIDENT, block.trim(), apartment.trim())
+                    .findActiveResidentEmailsByUnit(tenantId, com.packid.api.domain.model.RegistryEntry.EntryType.RESIDENT, block.trim(), apartment.trim())
                     .stream()
-                    .map(RegistryEntry::getEmail)
                     .map(this::clean)
                     .filter(this::looksLikeEmail)
                     .forEach(email -> addCaseInsensitive(emails, email));
@@ -60,6 +61,7 @@ public class UnitChangeNotificationPublisher {
         String cleanedBlock = clean(block);
         String cleanedApartment = clean(apartment);
         if (tenantId == null || cleanedBlock == null || cleanedApartment == null) return;
+        if (!emailNotificationsEnabled(tenantId)) return;
 
         List<String> recipients = residentEmails(tenantId, cleanedBlock, cleanedApartment, extraRecipients);
         if (recipients.isEmpty()) return;
@@ -75,6 +77,13 @@ public class UnitChangeNotificationPublisher {
                 clean(actor) == null ? "sistema" : actor.trim(),
                 LocalDateTime.now()
         ));
+    }
+
+    private boolean emailNotificationsEnabled(UUID tenantId) {
+        return condominiumRepository.findAllByTenantIdAndDeletedFalse(tenantId).stream()
+                .findFirst()
+                .map(condominium -> !Boolean.FALSE.equals(condominium.getEmailNotificationsEnabled()))
+                .orElse(true);
     }
 
     private void addCaseInsensitive(LinkedHashSet<String> emails, String email) {

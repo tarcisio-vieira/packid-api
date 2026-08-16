@@ -65,7 +65,9 @@ public class GoogleDrivePhotoService {
         if (accessToken == null || accessToken.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
         }
-        String folderId = findOrCreatePhotoFolder(accessToken, block, apartment);
+        String folderId = "SERVICE_PROVIDER".equalsIgnoreCase(entryType)
+                ? findOrCreateServiceProviderFolder(accessToken, registryEntryId)
+                : findOrCreatePhotoFolder(accessToken, block, apartment);
 
         String safeName = buildFileName(registryEntryId, originalFilename, mimeType);
         Map<String, Object> metadata = Map.of(
@@ -180,6 +182,13 @@ public class GoogleDrivePhotoService {
             }
             throw driveException("Não foi possível excluir a foto do Google Drive.", ex);
         }
+    }
+
+    private String findOrCreateServiceProviderFolder(String accessToken, UUID registryEntryId) {
+        String rootFolderId = findOrCreateFolder(accessToken, null, ROOT_FOLDER_NAME, "vsgiFolder", "condominium");
+        String providersFolderId = findOrCreateFolder(accessToken, rootFolderId, "Service Providers", "vsgiSection", "service-providers");
+        return findOrCreateFolder(accessToken, providersFolderId, "Provider " + registryEntryId,
+                "vsgiServiceProviderId", registryEntryId.toString());
     }
 
     private String findOrCreatePhotoFolder(String accessToken, String block, String apartment) {
@@ -328,7 +337,13 @@ public class GoogleDrivePhotoService {
 
     private String buildFileName(UUID registryEntryId, String originalFilename, String mimeType) {
         String extension = extension(originalFilename, mimeType);
-        return "packid-" + registryEntryId + "-" + System.currentTimeMillis() + extension;
+        String base = originalFilename == null ? "foto" : originalFilename;
+        int dot = base.lastIndexOf('.');
+        if (dot > 0) base = base.substring(0, dot);
+        base = base.replaceAll("[^A-Za-z0-9_-]", "-");
+        if (base.isBlank()) base = "foto";
+        if (base.length() > 40) base = base.substring(0, 40);
+        return "vsgi-" + registryEntryId + "-" + base + "-" + System.currentTimeMillis() + extension;
     }
 
     private String extension(String originalFilename, String mimeType) {

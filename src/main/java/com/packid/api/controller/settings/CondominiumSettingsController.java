@@ -3,6 +3,7 @@ package com.packid.api.controller.settings;
 import com.packid.api.controller.settings.dto.CondominiumSettingsResponse;
 import com.packid.api.controller.settings.dto.CondominiumSettingsUpdateRequest;
 import com.packid.api.domain.model.AppUser;
+import com.packid.api.integration.google.GoogleGmailService;
 import com.packid.api.integration.google.TenantGoogleAccountService;
 import com.packid.api.service.CondominiumSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,13 +28,16 @@ public class CondominiumSettingsController {
 
     private final CondominiumSettingsService settingsService;
     private final TenantGoogleAccountService googleAccountService;
+    private final GoogleGmailService gmailService;
 
     public CondominiumSettingsController(
             CondominiumSettingsService settingsService,
-            TenantGoogleAccountService googleAccountService
+            TenantGoogleAccountService googleAccountService,
+            GoogleGmailService gmailService
     ) {
         this.settingsService = settingsService;
         this.googleAccountService = googleAccountService;
+        this.gmailService = gmailService;
     }
 
     @GetMapping("/condominium")
@@ -67,6 +71,23 @@ public class CondominiumSettingsController {
         return ResponseEntity.status(302)
                 .location(URI.create(contextPath + "/oauth2/authorization/google"))
                 .build();
+    }
+
+    @PostMapping("/google-account/test-gmail")
+    public CondominiumSettingsResponse testGmail(@AuthenticationPrincipal OidcUser user) {
+        AppUser appUser = settingsService.requireAdmin(user);
+        var account = googleAccountService.requireConnected(appUser.getTenantId());
+        String recipient = account.getEmail();
+        gmailService.send(
+                appUser.getTenantId(),
+                recipient,
+                "VSGI Condomínio - Teste de envio do Gmail",
+                "Este é um e-mail de teste enviado pelo VSGI Condomínio. Se você recebeu esta mensagem, a integração com o Gmail está funcionando corretamente.",
+                "<p>Este é um e-mail de teste enviado pelo <strong>VSGI Condomínio</strong>.</p>"
+                        + "<p>Se você recebeu esta mensagem, a integração com o Gmail está funcionando corretamente.</p>",
+                "VSGI Condomínio"
+        );
+        return settingsService.responseFor(appUser);
     }
 
     @DeleteMapping("/google-account")

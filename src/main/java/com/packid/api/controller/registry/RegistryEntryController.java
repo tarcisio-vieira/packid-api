@@ -7,6 +7,7 @@ import com.packid.api.domain.model.RegistryEntry.EntryType;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
 import com.packid.api.service.RegistryEntryService;
 import com.packid.api.service.RegistryPhotoService;
+import com.packid.api.service.RegistryDocumentPhotoService;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -28,10 +29,13 @@ public class RegistryEntryController {
 
     private final RegistryEntryService service;
     private final RegistryPhotoService photoService;
+    private final RegistryDocumentPhotoService documentPhotoService;
 
-    public RegistryEntryController(RegistryEntryService service, RegistryPhotoService photoService) {
+    public RegistryEntryController(RegistryEntryService service, RegistryPhotoService photoService,
+                                   RegistryDocumentPhotoService documentPhotoService) {
         this.service = service;
         this.photoService = photoService;
+        this.documentPhotoService = documentPhotoService;
     }
 
     @GetMapping
@@ -111,6 +115,47 @@ public class RegistryEntryController {
             @PathVariable UUID id
     ) {
         photoService.delete(user, id, authorizedClient);
+        return ResponseEntity.ok(service.getById(user, id));
+    }
+
+
+    @PutMapping(path = "/{id}/documents/{kind}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RegistryEntryResponse> uploadDocumentPhoto(
+            @AuthenticationPrincipal OidcUser user,
+            @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient,
+            @PathVariable UUID id,
+            @PathVariable String kind,
+            @RequestPart("file") MultipartFile file
+    ) {
+        documentPhotoService.upload(user, id, documentPhotoService.kind(kind), file, authorizedClient);
+        return ResponseEntity.ok(service.getById(user, id));
+    }
+
+    @GetMapping("/{id}/documents/{kind}")
+    public ResponseEntity<byte[]> getDocumentPhoto(
+            @AuthenticationPrincipal OidcUser user,
+            @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient,
+            @PathVariable UUID id,
+            @PathVariable String kind
+    ) {
+        GoogleDrivePhotoService.PhotoContent photo = documentPhotoService.download(user, id, documentPhotoService.kind(kind), authorizedClient);
+        MediaType contentType;
+        try {
+            contentType = photo.mimeType() == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(photo.mimeType());
+        } catch (IllegalArgumentException ex) {
+            contentType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(contentType).body(photo.bytes());
+    }
+
+    @DeleteMapping("/{id}/documents/{kind}")
+    public ResponseEntity<RegistryEntryResponse> deleteDocumentPhoto(
+            @AuthenticationPrincipal OidcUser user,
+            @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient,
+            @PathVariable UUID id,
+            @PathVariable String kind
+    ) {
+        documentPhotoService.delete(user, id, documentPhotoService.kind(kind), authorizedClient);
         return ResponseEntity.ok(service.getById(user, id));
     }
 

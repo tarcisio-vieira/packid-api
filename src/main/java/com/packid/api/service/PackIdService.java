@@ -18,6 +18,7 @@ import com.packid.api.domain.repository.PersonRepository;
 import com.packid.api.domain.repository.ResidentialUnitRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.type.PackageType;
+import com.packid.api.service.notification.UnitChangeNotificationPublisher;
 import jakarta.transaction.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,6 +42,7 @@ public class PackIdService {
     private final RegistryEntryRepository registryEntryRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CondominiumRepository condominiumRepository;
+    private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
 
     public PackIdService(
             PackIdRepository repository,
@@ -49,7 +51,8 @@ public class PackIdService {
             PersonRepository personRepository,
             RegistryEntryRepository registryEntryRepository,
             CondominiumRepository condominiumRepository,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher
     ) {
         this.repository = repository;
         this.appUserRepository = appUserRepository;
@@ -58,6 +61,7 @@ public class PackIdService {
         this.registryEntryRepository = registryEntryRepository;
         this.condominiumRepository = condominiumRepository;
         this.eventPublisher = eventPublisher;
+        this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
     }
 
     @Transactional
@@ -89,6 +93,7 @@ public class PackIdService {
         PackId saved = repository.save(p);
 
         eventPublisher.publishEvent(new PackIdCreatedEvent(saved.getTenantId(), saved.getId()));
+        publishPackIdEmail(saved, normalizeActor(actor));
 
         return toResponse(saved);
     }
@@ -211,6 +216,7 @@ public class PackIdService {
             PackId saved = repository.save(p);
 
             eventPublisher.publishEvent(new PackIdCreatedEvent(saved.getTenantId(), saved.getId()));
+            publishPackIdEmail(saved, email == null || email.isBlank() ? "sistema" : email);
 
             return toResponse(saved);
         } catch (DataIntegrityViolationException ex) {
@@ -219,6 +225,33 @@ public class PackIdService {
                     "Não foi possível salvar o pacote."
             );
         }
+    }
+
+
+    private void publishPackIdEmail(PackId packId, String actor) {
+        String block = cleanOptional(packId.getBuildingBlock());
+        String apartment = cleanOptional(packId.getApartment());
+        if (block == null || apartment == null) return;
+
+        String code = cleanOptional(packId.getLabelPackageCode());
+        if (code == null) code = cleanOptional(packId.getPackageCode());
+
+        StringBuilder details = new StringBuilder("Uma nova encomenda foi registrada para a unidade.");
+        if (code != null) details.append(" Código da encomenda: ").append(code).append('.');
+        if (cleanOptional(packId.getBookPage()) != null) {
+            details.append(" Página: ").append(packId.getBookPage()).append('.');
+        }
+
+        unitChangeNotificationPublisher.publish(
+                packId.getTenantId(),
+                block,
+                apartment,
+                List.of(),
+                "PACKID_RECEIVED",
+                "Encomenda recebida",
+                details.toString(),
+                actor
+        );
     }
 
     private ResidentialUnit validateResidentialUnit(UUID tenantId, UUID residentialUnitId) {

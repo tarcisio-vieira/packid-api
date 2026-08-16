@@ -11,7 +11,7 @@ DO $$
 DECLARE
   v_slug        text := 'tenant-teste-recanto-tropical';
   v_created_by  text := 'seed@packid';
-  v_email       text := 'tarcisio.vieira.dom@google.com';
+  v_email       text := 'tarcisio.vieira.dom@gmail.com';
 
   v_tenant_id   uuid;
   v_condo_id    uuid;
@@ -148,11 +148,11 @@ WHERE name = 'Condomínio Recanto Tropical';
 
 SELECT id, tenant_id, full_name, email, person_type
 FROM person
-WHERE email = 'tarcisio.vieira.dom@google.com';
+WHERE email = 'tarcisio.vieira.dom@gmail.com';
 
 SELECT id, tenant_id, email, provider, provider_subject, role, enabled
 FROM app_user
-WHERE email = 'tarcisio.vieira.dom@google.com';
+WHERE email = 'tarcisio.vieira.dom@gmail.com';
 
 -- Deve dar 96 unidades (12 * 8)
 SELECT COUNT(*) AS total_unidades_bloco2

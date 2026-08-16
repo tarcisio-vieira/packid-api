@@ -5,6 +5,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.UUID;
+
 public record RegistryEntryRequest(
         @NotNull EntryType entryType,
         @NotBlank String name,
@@ -14,6 +16,7 @@ public record RegistryEntryRequest(
         String block,
         String apartment,
         String company,
+        UUID serviceCompanyId,
         String ownerName,
         String brand,
         String model,

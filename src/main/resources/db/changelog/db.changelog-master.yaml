@@ -37,3 +37,7 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0017-email-notification-log.yaml
   - include:
       file: db/changelog/master/db.changelog-0018-condominium-settings-google.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0019-service-providers.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0020-email-notification-settings.yaml

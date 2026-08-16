@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0020-email-notification-settings
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: condominium
+            columns:
+              - column:
+                  name: email_notifications_enabled
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
