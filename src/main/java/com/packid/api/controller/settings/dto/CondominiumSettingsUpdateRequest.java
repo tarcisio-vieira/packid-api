@@ -19,5 +19,6 @@ public record CondominiumSettingsUpdateRequest(
         @Size(max = 160) String managerName,
         @Size(max = 30) String whatsapp,
         @Size(max = 1000) String notes,
-        Boolean emailNotificationsEnabled
+        Boolean emailNotificationsEnabled,
+        Boolean packIdPrintTwoLabels
 ) {}

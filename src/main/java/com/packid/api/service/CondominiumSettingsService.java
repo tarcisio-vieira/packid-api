@@ -3,6 +3,7 @@ package com.packid.api.service;
 import com.packid.api.controller.settings.dto.CondominiumSettingsResponse;
 import com.packid.api.controller.settings.dto.CondominiumSettingsUpdateRequest;
 import com.packid.api.controller.settings.dto.GoogleAccountSettingsResponse;
+import com.packid.api.controller.settings.dto.PackIdLabelPrintSettingsResponse;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.Condominium;
 import com.packid.api.domain.model.Tenant;
@@ -76,6 +77,7 @@ public class CondominiumSettingsService {
         condominium.setWhatsapp(clean(request.whatsapp()));
         condominium.setNotes(clean(request.notes()));
         condominium.setEmailNotificationsEnabled(!Boolean.FALSE.equals(request.emailNotificationsEnabled()));
+        condominium.setPackIdPrintTwoLabels(!Boolean.FALSE.equals(request.packIdPrintTwoLabels()));
         condominiumRepository.save(condominium);
 
         return responseFor(appUser);
@@ -95,6 +97,13 @@ public class CondominiumSettingsService {
         Condominium condominium = firstCondominium(appUser);
         TenantGoogleAccount googleAccount = googleAccountService.find(appUser.getTenantId()).orElse(null);
         return toResponse(tenant, condominium, googleAccount);
+    }
+
+    public PackIdLabelPrintSettingsResponse labelPrintSettings(OidcUser oidcUser) {
+        AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        Condominium condominium = firstCondominium(appUser);
+        boolean printTwoLabels = condominium == null || !Boolean.FALSE.equals(condominium.getPackIdPrintTwoLabels());
+        return new PackIdLabelPrintSettingsResponse(printTwoLabels ? 2 : 1);
     }
 
     private Tenant requireTenant(AppUser appUser) {
@@ -136,6 +145,7 @@ public class CondominiumSettingsService {
                 c == null ? null : c.getWhatsapp(),
                 c == null ? null : c.getNotes(),
                 c == null || !Boolean.FALSE.equals(c.getEmailNotificationsEnabled()),
+                c == null || !Boolean.FALSE.equals(c.getPackIdPrintTwoLabels()),
                 google
         );
     }

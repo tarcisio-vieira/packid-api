@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0022-packid-label-print-settings
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: condominium
+            columns:
+              - column:
+                  name: packid_print_two_labels
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

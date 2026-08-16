@@ -43,3 +43,5 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0020-email-notification-settings.yaml
   - include:
       file: db/changelog/master/db.changelog-0021-registry-import-fields.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0022-packid-label-print-settings.yaml

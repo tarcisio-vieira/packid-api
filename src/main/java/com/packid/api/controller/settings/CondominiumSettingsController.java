@@ -2,6 +2,7 @@ package com.packid.api.controller.settings;
 
 import com.packid.api.controller.settings.dto.CondominiumSettingsResponse;
 import com.packid.api.controller.settings.dto.CondominiumSettingsUpdateRequest;
+import com.packid.api.controller.settings.dto.PackIdLabelPrintSettingsResponse;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.integration.google.GoogleGmailService;
 import com.packid.api.integration.google.TenantGoogleAccountService;
@@ -51,6 +52,11 @@ public class CondominiumSettingsController {
             @Valid @RequestBody CondominiumSettingsUpdateRequest request
     ) {
         return settingsService.update(user, request);
+    }
+
+    @GetMapping("/label-print")
+    public PackIdLabelPrintSettingsResponse labelPrintSettings(@AuthenticationPrincipal OidcUser user) {
+        return settingsService.labelPrintSettings(user);
     }
 
     @GetMapping("/google-account/authorize")
