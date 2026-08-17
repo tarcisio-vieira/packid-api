@@ -205,7 +205,7 @@ public class RegistryEntryService {
         if (existing) {
             notifyUpdated(appUser, before, saved);
         } else {
-            notifyCreated(appUser, saved);
+            // notifyCreated(appUser, saved);
         }
         return toResponse(saved, appUser, officialGoogleEmail);
     }

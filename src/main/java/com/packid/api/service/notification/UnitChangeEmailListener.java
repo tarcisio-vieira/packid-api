@@ -3,7 +3,10 @@ package com.packid.api.service.notification;
 import com.packid.api.domain.model.EmailNotificationLog;
 import com.packid.api.domain.model.Tenant;
 import com.packid.api.domain.model.TenantGoogleAccount;
+import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.repository.EmailNotificationLogRepository;
+import com.packid.api.domain.repository.CondominiumRepository;
+import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.repository.TenantRepository;
 import com.packid.api.integration.google.GoogleGmailService;
 import com.packid.api.integration.google.TenantGoogleAccountService;
@@ -17,6 +20,11 @@ import org.springframework.web.util.HtmlUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 @Component
 public class UnitChangeEmailListener {
@@ -27,22 +35,34 @@ public class UnitChangeEmailListener {
     private final TenantGoogleAccountService googleAccountService;
     private final TenantRepository tenantRepository;
     private final EmailNotificationLogRepository logRepository;
+    private final RegistryEntryRepository registryEntryRepository;
+    private final CondominiumRepository condominiumRepository;
 
     public UnitChangeEmailListener(
             GoogleGmailService gmailService,
             TenantGoogleAccountService googleAccountService,
             TenantRepository tenantRepository,
-            EmailNotificationLogRepository logRepository
+            EmailNotificationLogRepository logRepository,
+            RegistryEntryRepository registryEntryRepository,
+            CondominiumRepository condominiumRepository
     ) {
         this.gmailService = gmailService;
         this.googleAccountService = googleAccountService;
         this.tenantRepository = tenantRepository;
         this.logRepository = logRepository;
+        this.registryEntryRepository = registryEntryRepository;
+        this.condominiumRepository = condominiumRepository;
     }
 
     @Async("mailTaskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onUnitChange(UnitChangeEmailEvent event) {
+        if (!emailNotificationsEnabled(event.tenantId())) return;
+
+        List<String> recipients = residentEmails(
+                event.tenantId(), event.block(), event.apartment(), event.recipients());
+        if (recipients.isEmpty()) return;
+
         TenantGoogleAccount account = googleAccountService.find(event.tenantId()).orElse(null);
         if (account == null || account.getRefreshTokenEncrypted() == null
                 || !Boolean.TRUE.equals(account.getGmailEnabled())) {
@@ -62,7 +82,7 @@ public class UnitChangeEmailListener {
         String subject = "VSGI Condomínio - " + event.title() + " - Bloco "
                 + event.block() + " / Apto " + event.apartment();
 
-        for (String recipient : event.recipients()) {
+        for (String recipient : recipients) {
             sendOne(event, condominiumName, sender, recipient, subject);
         }
     }
@@ -171,6 +191,44 @@ public class UnitChangeEmailListener {
                 + "</td><td style=\"padding:5px 0\">"
                 + HtmlUtils.htmlEscape(value == null ? "-" : value)
                 + "</td></tr>";
+    }
+
+    private boolean emailNotificationsEnabled(UUID tenantId) {
+        return condominiumRepository.findAllByTenantIdAndDeletedFalse(tenantId).stream()
+                .findFirst()
+                .map(condominium -> !Boolean.FALSE.equals(condominium.getEmailNotificationsEnabled()))
+                .orElse(true);
+    }
+
+    private List<String> residentEmails(UUID tenantId, String block, String apartment, Collection<String> extras) {
+        LinkedHashSet<String> emails = new LinkedHashSet<>();
+        if (tenantId != null && clean(block) != null && clean(apartment) != null) {
+            registryEntryRepository
+                    .findActiveResidentEmailsByUnit(tenantId, RegistryEntry.EntryType.RESIDENT, block.trim(), apartment.trim())
+                    .stream()
+                    .map(this::clean)
+                    .filter(this::looksLikeEmail)
+                    .forEach(email -> addCaseInsensitive(emails, email));
+        }
+        if (extras != null) {
+            extras.stream()
+                    .map(this::clean)
+                    .filter(this::looksLikeEmail)
+                    .forEach(email -> addCaseInsensitive(emails, email));
+        }
+        return List.copyOf(emails);
+    }
+
+    private void addCaseInsensitive(LinkedHashSet<String> emails, String email) {
+        String key = email.toLowerCase(Locale.ROOT);
+        boolean exists = emails.stream().anyMatch(item -> item.toLowerCase(Locale.ROOT).equals(key));
+        if (!exists) emails.add(email);
+    }
+
+    private boolean looksLikeEmail(String email) {
+        if (email == null) return false;
+        int at = email.indexOf('@');
+        return at > 0 && at < email.length() - 3 && email.indexOf('.', at) > at + 1;
     }
 
     private String limit(String value, int max) {
