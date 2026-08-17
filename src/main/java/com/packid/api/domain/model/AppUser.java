@@ -48,7 +48,7 @@ public class AppUser extends AuditableEntity {
     @Column(name = "provider", nullable = false, length = 30)
     private AuthProvider provider = AuthProvider.GOOGLE;
 
-    @Column(name = "provider_subject", nullable = false, length = 255)
+    @Column(name = "provider_subject", length = 255)
     private String providerSubject;
 
     @Column(name = "role", nullable = false, length = 50)

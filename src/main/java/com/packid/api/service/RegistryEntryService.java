@@ -22,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -47,6 +48,9 @@ public class RegistryEntryService {
     private final TenantGoogleAccountService googleAccountService;
     private final ServiceRecordService serviceRecordService;
     private final ServiceCompanyRepository serviceCompanyRepository;
+    private final AccessControlService accessControlService;
+    private final PasswordEncoder passwordEncoder;
+    private final SpaceAccessService spaceAccessService;
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
@@ -59,7 +63,10 @@ public class RegistryEntryService {
             UnitChangeNotificationPublisher unitChangeNotificationPublisher,
             TenantGoogleAccountService googleAccountService,
             ServiceRecordService serviceRecordService,
-            ServiceCompanyRepository serviceCompanyRepository
+            ServiceCompanyRepository serviceCompanyRepository,
+            AccessControlService accessControlService,
+            PasswordEncoder passwordEncoder,
+            SpaceAccessService spaceAccessService
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -72,10 +79,14 @@ public class RegistryEntryService {
         this.googleAccountService = googleAccountService;
         this.serviceRecordService = serviceRecordService;
         this.serviceCompanyRepository = serviceCompanyRepository;
+        this.accessControlService = accessControlService;
+        this.passwordEncoder = passwordEncoder;
+        this.spaceAccessService = spaceAccessService;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         List<RegistryEntry> entries = entryType == null
                 ? repository.findAllByTenantIdAndDeletedFalseOrderByNameAsc(appUser.getTenantId())
                 : repository.findAllByTenantIdAndEntryTypeAndDeletedFalseOrderByNameAsc(appUser.getTenantId(), entryType);
@@ -96,6 +107,7 @@ public class RegistryEntryService {
             String sortDirection
     ) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         if (entryType == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de cadastro é obrigatório.");
         }
@@ -137,6 +149,7 @@ public class RegistryEntryService {
             UUID occupancyId
     ) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         String cleanedBlock = cleanRequiredUnit(block, "Bloco é obrigatório.");
         String cleanedApartment = cleanRequiredUnit(apartment, "Apartamento é obrigatório.");
 
@@ -155,6 +168,7 @@ public class RegistryEntryService {
 
     public RegistryEntryResponse getById(OidcUser oidcUser, UUID id) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
         String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
@@ -163,6 +177,7 @@ public class RegistryEntryService {
 
     public UnitRegistrySummaryResponse getUnitSummary(OidcUser oidcUser, String block, String apartment, UUID occupancyId) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         String cleanedBlock = cleanRequiredUnit(block, "Bloco é obrigatório.");
         String cleanedApartment = cleanRequiredUnit(apartment, "Apartamento é obrigatório.");
 
@@ -238,7 +253,9 @@ public class RegistryEntryService {
                                 r.getArrivedAt(),
                                 r.getCreatedBy()
                         ))
-                        .toList()
+                        .toList(),
+                spaceAccessService.getByUnit(appUser, cleanedBlock, cleanedApartment,
+                        selectedOccupancy == null ? null : selectedOccupancy.getId())
         );
     }
 
@@ -251,6 +268,8 @@ public class RegistryEntryService {
     @Transactional
     public RegistryEntryResponse create(OidcUser oidcUser, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
+        accessControlService.requireMutationPermission(appUser, request.entryType());
         // Resolve a conta oficial antes de persistir/alterar RegistryEntry. Assim evitamos
         // consultas adicionais que provoquem auto-flush enquanto uma nova entidade ainda
         // está sendo processada pelo Hibernate.
@@ -266,6 +285,7 @@ public class RegistryEntryService {
         }
 
         apply(entry, request);
+        applyResidentAccess(appUser, entry, request);
         syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
@@ -285,12 +305,16 @@ public class RegistryEntryService {
     @Transactional
     public RegistryEntryResponse update(OidcUser oidcUser, UUID id, RegistryEntryRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        accessControlService.requireMutationPermission(appUser, entry.getEntryType());
+        accessControlService.requireMutationPermission(appUser, request.entryType());
 
         EntrySnapshot before = snapshot(entry);
         apply(entry, request);
+        applyResidentAccess(appUser, entry, request);
         syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
         syncResidentPerson(appUser, entry);
@@ -303,8 +327,10 @@ public class RegistryEntryService {
     @Transactional
     public void delete(OidcUser oidcUser, UUID id) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         RegistryEntry entry = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        accessControlService.requireMutationPermission(appUser, entry.getEntryType());
 
         EntrySnapshot before = snapshot(entry);
         entry.setDeleted(true);
@@ -386,6 +412,52 @@ public class RegistryEntryService {
                     "Para cadastros vinculados à ocupação, informe bloco e apartamento."
             );
         }
+    }
+
+    private void applyResidentAccess(AppUser appUser, RegistryEntry entry, RegistryEntryRequest request) {
+        if (entry.getEntryType() != EntryType.RESIDENT) {
+            entry.setResidentUsername(null);
+            entry.setResidentPasswordHash(null);
+            return;
+        }
+
+        boolean enabled = Boolean.TRUE.equals(request.residentAccessEnabled());
+        if (!enabled) {
+            entry.setResidentUsername(null);
+            entry.setResidentPasswordHash(null);
+            return;
+        }
+
+        String username = clean(request.residentUsername());
+        if (username == null || username.length() < 4) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Informe um usuário de acesso do morador com pelo menos 4 caracteres.");
+        }
+        username = username.toLowerCase(java.util.Locale.ROOT);
+        if (username.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuário do morador muito longo.");
+        }
+
+        RegistryEntry conflicting = repository
+                .findByTenantIdAndResidentUsernameIgnoreCaseAndDeletedFalse(appUser.getTenantId(), username)
+                .orElse(null);
+        if (conflicting != null && (entry.getId() == null || !conflicting.getId().equals(entry.getId()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Este usuário de acesso já está sendo usado por outro condômino.");
+        }
+
+        String password = request.residentPassword();
+        if (password != null && !password.isBlank()) {
+            if (password.length() < 6) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "A senha do morador deve ter pelo menos 6 caracteres.");
+            }
+            entry.setResidentPasswordHash(passwordEncoder.encode(password));
+        } else if (clean(entry.getResidentPasswordHash()) == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Informe uma senha para liberar o primeiro acesso do morador.");
+        }
+        entry.setResidentUsername(username);
     }
 
     private void syncServiceCompany(AppUser appUser, RegistryEntry entry) {
@@ -723,6 +795,10 @@ public class RegistryEntryService {
         return toResponse(entry, appUser, officialGoogleEmail);
     }
 
+    public RegistryEntryResponse toResidentResponse(RegistryEntry entry, UUID tenantId) {
+        return toResponse(entry, null, googleAccountService.getOfficialEmail(tenantId));
+    }
+
     private RegistryEntryResponse toResponse(RegistryEntry entry, AppUser appUser, String officialGoogleEmail) {
         return new RegistryEntryResponse(
                 entry.getId(),
@@ -754,12 +830,14 @@ public class RegistryEntryService {
                 entry.getParkingSpaceRented(),
                 entry.getParkingSpaceRentalNotes(),
                 entry.getNotes(),
+                clean(entry.getResidentUsername()) != null && clean(entry.getResidentPasswordHash()) != null,
+                entry.getResidentUsername(),
                 entry.getPhotoDriveFileId() != null && !entry.getPhotoDriveFileId().isBlank(),
-                sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail())
+                (appUser != null && sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail()))
                         || sameEmail(entry.getPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getPhotoFileName(),
                 entry.getDocumentPhotoDriveFileId() != null && !entry.getDocumentPhotoDriveFileId().isBlank(),
-                sameEmail(entry.getDocumentPhotoOwnerEmail(), appUser.getEmail()) || sameEmail(entry.getDocumentPhotoOwnerEmail(), officialGoogleEmail),
+                (appUser != null && sameEmail(entry.getDocumentPhotoOwnerEmail(), appUser.getEmail())) || sameEmail(entry.getDocumentPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getDocumentPhotoFileName(),
                 entry.getActive(),
                 entry.getCreatedAt(),

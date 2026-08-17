@@ -34,5 +34,8 @@ public record RegistryEntryRequest(
         Boolean parkingSpaceRented,
         String parkingSpaceRentalNotes,
         String notes,
+        Boolean residentAccessEnabled,
+        String residentUsername,
+        String residentPassword,
         Boolean active
 ) {}

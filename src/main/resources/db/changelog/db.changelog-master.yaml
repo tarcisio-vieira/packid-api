@@ -49,3 +49,7 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0023-single-document-photo.yaml
   - include:
       file: db/changelog/master/db.changelog-0024-registry-performance.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0025-access-control-resident.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0026-space-access.yaml

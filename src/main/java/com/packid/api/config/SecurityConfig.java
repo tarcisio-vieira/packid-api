@@ -18,6 +18,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
@@ -39,6 +41,7 @@ import java.util.UUID;
 public class SecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    private static final String DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
     private static final String GOOGLE_REGISTRATION_ID = "google";
 
     @Value("${app.frontend-url}")
@@ -85,6 +88,7 @@ public class SecurityConfig {
                     additional.put("prompt", "consent select_account");
                     Set<String> scopes = new LinkedHashSet<>(authorizationRequest.getScopes());
                     scopes.add(GMAIL_SEND_SCOPE);
+                    scopes.add(DRIVE_FILE_SCOPE);
                     builder.additionalParameters(additional).scopes(scopes);
                     session.removeAttribute(CondominiumSettingsController.FORCE_GOOGLE_CONSENT);
                 }
@@ -92,6 +96,11 @@ public class SecurityConfig {
                 return builder.build();
             }
         };
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
@@ -110,6 +119,9 @@ public class SecurityConfig {
                                 "/manifest.webmanifest", "/robots.txt").permitAll()
                         .requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
                         .requestMatchers("/actuator/health", "/health", "/public/**").permitAll()
+                        // O portal do morador usa uma sessão própria (usuário/senha da unidade),
+                        // separada do OAuth2 Google utilizado pela administração/portaria.
+                        .requestMatchers("/api/resident-auth/**", "/api/resident/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()
                 )
@@ -181,7 +193,7 @@ public class SecurityConfig {
 
                             redirect(response, false, "loginError=1");
                         }))
-                .logout(logout -> logout.logoutSuccessUrl(frontendUrl).permitAll());
+                .logout(logout -> logout.logoutSuccessUrl(collaboratorFrontendUrl()).permitAll());
 
         return http.build();
     }
@@ -223,12 +235,19 @@ public class SecurityConfig {
             String query
     ) throws IOException {
         if (!settings) {
-            response.sendRedirect(appendQuery(frontendUrl, query));
+            response.sendRedirect(appendQuery(collaboratorFrontendUrl(), query));
             return;
         }
 
-        String target = appendQuery(frontendUrl, "view=settings");
+        String target = appendQuery(collaboratorFrontendUrl(), "view=settings");
         response.sendRedirect(appendQuery(target, query));
+    }
+
+
+    private String collaboratorFrontendUrl() {
+        String base = frontendUrl == null ? "" : frontendUrl.trim().replaceAll("/+$", "");
+        if (base.endsWith("/colaborador")) return base;
+        return base + "/colaborador";
     }
 
     private String appendQuery(String url, String query) {

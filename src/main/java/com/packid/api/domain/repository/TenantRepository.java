@@ -22,6 +22,7 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
     // >>> soft delete
     Optional<Tenant> findByIdAndDeletedFalse(UUID id);
     List<Tenant> findAllByDeletedFalse();
+    List<Tenant> findAllByActiveTrueAndDeletedFalseOrderByNameAsc();
 
     Optional<Tenant> findBySlugAndDeletedFalse(String slug);
 }

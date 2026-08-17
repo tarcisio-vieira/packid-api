@@ -25,17 +25,20 @@ public class CondominiumSettingsService {
     private final TenantRepository tenantRepository;
     private final CondominiumRepository condominiumRepository;
     private final TenantGoogleAccountService googleAccountService;
+    private final AccessControlService accessControlService;
 
     public CondominiumSettingsService(
             AuthenticatedUserService authenticatedUserService,
             TenantRepository tenantRepository,
             CondominiumRepository condominiumRepository,
-            TenantGoogleAccountService googleAccountService
+            TenantGoogleAccountService googleAccountService,
+            AccessControlService accessControlService
     ) {
         this.authenticatedUserService = authenticatedUserService;
         this.tenantRepository = tenantRepository;
         this.condominiumRepository = condominiumRepository;
         this.googleAccountService = googleAccountService;
+        this.accessControlService = accessControlService;
     }
 
     public CondominiumSettingsResponse get(OidcUser oidcUser) {
@@ -85,10 +88,7 @@ public class CondominiumSettingsService {
 
     public AppUser requireAdmin(OidcUser oidcUser) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
-        if (!"ADMIN".equalsIgnoreCase(clean(appUser.getRole()))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Somente administradores podem alterar as configurações do condomínio.");
-        }
+        accessControlService.requireSettingsManager(appUser);
         return appUser;
     }
 

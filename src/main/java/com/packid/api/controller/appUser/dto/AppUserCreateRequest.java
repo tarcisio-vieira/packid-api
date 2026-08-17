@@ -18,7 +18,6 @@ public record AppUserCreateRequest(
 
         AuthProvider provider,
 
-        @NotBlank
         String providerSubject,
 
         @NotBlank

@@ -13,142 +13,154 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class AppUserService {
 
     private final AppUserRepository repository;
+    private final AccessControlService accessControlService;
 
-    public AppUserService(AppUserRepository repository) {
+    public AppUserService(AppUserRepository repository, AccessControlService accessControlService) {
         this.repository = repository;
+        this.accessControlService = accessControlService;
     }
 
     @Transactional
-    public AppUserResponse create(UUID tenantId, AppUserCreateRequest req, String actor) {
-        if (tenantId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tenantId é obrigatório");
+    public AppUserResponse create(AppUser manager, AppUserCreateRequest req) {
+        accessControlService.requireSettingsManager(manager);
+        UUID tenantId = manager.getTenantId();
+        String email = normalizeEmail(req.email());
+        String role = accessControlService.normalizeRole(req.role());
+        validateAssignableRole(manager, role);
+
+        repository.findByTenantIdAndEmailAndDeletedFalse(tenantId, email).ifPresent(u -> {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe usuário com este e-mail neste condomínio.");
+        });
+
+        AuthProvider provider = req.provider() != null ? req.provider() : AuthProvider.GOOGLE;
+        String providerSubject = clean(req.providerSubject());
+        if (providerSubject != null) {
+            repository.findByTenantIdAndProviderAndProviderSubjectAndDeletedFalse(tenantId, provider, providerSubject)
+                    .ifPresent(u -> { throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Esta conta Google já está vinculada a outro usuário."); });
         }
-
-        // email único por tenant (considerando deleted=false)
-        repository.findByTenantIdAndEmailAndDeletedFalse(tenantId, req.email())
-                .ifPresent(u -> {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe usuário com este email neste tenant");
-                });
-
-        AuthProvider provider = (req.provider() != null) ? req.provider() : AuthProvider.GOOGLE;
-
-        // (tenant, provider, subject) único
-        repository.findByTenantIdAndProviderAndProviderSubjectAndDeletedFalse(tenantId, provider, req.providerSubject())
-                .ifPresent(u -> {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe usuário com este provider/subject neste tenant");
-                });
 
         AppUser u = new AppUser();
         u.setTenantId(tenantId);
         u.setPersonId(req.personId());
-        u.setEmail(req.email());
-        u.setFullName(req.fullName());
+        u.setEmail(email);
+        u.setFullName(clean(req.fullName()));
         u.setProvider(provider);
-        u.setProviderSubject(req.providerSubject());
-        u.setRole(req.role());
-        u.setEnabled(req.enabled() != null ? req.enabled() : Boolean.TRUE);
-
-        u.setCreatedBy(normalizeActor(actor));
-
-        AppUser saved = repository.save(u);
-        return toResponse(saved);
+        u.setProviderSubject(providerSubject);
+        u.setRole(role);
+        u.setEnabled(req.enabled() == null ? Boolean.TRUE : req.enabled());
+        u.setCreatedBy(actor(manager));
+        return toResponse(repository.save(u));
     }
 
-    public AppUserResponse getById(UUID tenantId, UUID id) {
-        AppUser u = repository.findByTenantIdAndIdAndDeletedFalse(tenantId, id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AppUser não encontrado"));
-        return toResponse(u);
+    public AppUserResponse getById(AppUser manager, UUID id) {
+        accessControlService.requireSettingsManager(manager);
+        return toResponse(requireInTenant(manager.getTenantId(), id));
     }
 
-    public List<AppUserResponse> getAll(UUID tenantId) {
-        return repository.findAllByTenantIdAndDeletedFalse(tenantId)
-                .stream()
+    public List<AppUserResponse> getAll(AppUser manager) {
+        accessControlService.requireSettingsManager(manager);
+        return repository.findAllByTenantIdAndDeletedFalse(manager.getTenantId()).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional
-    public AppUserResponse update(UUID tenantId, UUID id, AppUserUpdateRequest req, String actor) {
-        AppUser u = repository.findByTenantIdAndIdAndDeletedFalse(tenantId, id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AppUser não encontrado"));
+    public AppUserResponse update(AppUser manager, UUID id, AppUserUpdateRequest req) {
+        accessControlService.requireSettingsManager(manager);
+        AppUser u = requireInTenant(manager.getTenantId(), id);
 
-        // email (se mudar, valida conflito)
-        if (req.email() != null && !req.email().equalsIgnoreCase(u.getEmail())) {
-            repository.findByTenantIdAndEmailAndDeletedFalse(tenantId, req.email())
-                    .ifPresent(other -> {
-                        if (!other.getId().equals(id)) {
-                            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe usuário com este email neste tenant");
-                        }
-                    });
-            u.setEmail(req.email());
+        String requestedRole = req.role() == null ? u.getRole() : accessControlService.normalizeRole(req.role());
+        validateAssignableRole(manager, requestedRole);
+        if (!accessControlService.isAdmin(manager) && "ADMIN".equalsIgnoreCase(u.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A secretaria não pode alterar um usuário administrador.");
         }
 
-        if (req.fullName() != null) u.setFullName(req.fullName());
+        if (req.email() != null) {
+            String email = normalizeEmail(req.email());
+            if (!email.equalsIgnoreCase(u.getEmail())) {
+                repository.findByTenantIdAndEmailAndDeletedFalse(manager.getTenantId(), email).ifPresent(other -> {
+                    if (!other.getId().equals(id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Já existe usuário com este e-mail neste condomínio.");
+                });
+                u.setEmail(email);
+            }
+        }
+        if (req.fullName() != null) u.setFullName(clean(req.fullName()));
         if (req.personId() != null) u.setPersonId(req.personId());
-        if (req.role() != null) u.setRole(req.role());
+        if (req.role() != null) u.setRole(requestedRole);
         if (req.enabled() != null) u.setEnabled(req.enabled());
 
-        // provider/providerSubject (se você permitir alterar)
         AuthProvider newProvider = req.provider() != null ? req.provider() : u.getProvider();
-        String newSubject = req.providerSubject() != null ? req.providerSubject() : u.getProviderSubject();
-
-        boolean mudouProviderOuSubject =
-                newProvider != u.getProvider() || (newSubject != null && !newSubject.equals(u.getProviderSubject()));
-
-        if (mudouProviderOuSubject) {
-            repository.findByTenantIdAndProviderAndProviderSubjectAndDeletedFalse(tenantId, newProvider, newSubject)
+        String newSubject = req.providerSubject() != null ? clean(req.providerSubject()) : u.getProviderSubject();
+        boolean changedProvider = newProvider != u.getProvider();
+        boolean changedSubject = !java.util.Objects.equals(clean(newSubject), clean(u.getProviderSubject()));
+        if ((changedProvider || changedSubject) && newSubject != null) {
+            repository.findByTenantIdAndProviderAndProviderSubjectAndDeletedFalse(manager.getTenantId(), newProvider, newSubject)
                     .ifPresent(other -> {
-                        if (!other.getId().equals(id)) {
-                            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe usuário com este provider/subject neste tenant");
-                        }
+                        if (!other.getId().equals(id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Esta conta Google já está vinculada a outro usuário.");
                     });
-
-            u.setProvider(newProvider);
-            u.setProviderSubject(newSubject);
         }
-
-        u.setUpdatedBy(normalizeActor(actor));
-
-        AppUser saved = repository.save(u);
-        return toResponse(saved);
+        u.setProvider(newProvider);
+        u.setProviderSubject(newSubject);
+        u.setUpdatedBy(actor(manager));
+        return toResponse(repository.save(u));
     }
 
     @Transactional
-    public void logicalDelete(UUID tenantId, UUID id, String actor) {
-        AppUser u = repository.findByTenantIdAndIdAndDeletedFalse(tenantId, id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AppUser não encontrado"));
-
+    public void logicalDelete(AppUser manager, UUID id) {
+        accessControlService.requireSettingsManager(manager);
+        AppUser u = requireInTenant(manager.getTenantId(), id);
+        if (u.getId().equals(manager.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não é possível excluir o próprio usuário autenticado.");
+        }
+        if (!accessControlService.isAdmin(manager) && "ADMIN".equalsIgnoreCase(u.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A secretaria não pode excluir um usuário administrador.");
+        }
         u.setDeleted(true);
         u.setDeletedAt(LocalDateTime.now());
-        u.setDeletedBy(normalizeActor(actor));
-
+        u.setDeletedBy(actor(manager));
         repository.save(u);
     }
 
-    private AppUserResponse toResponse(AppUser u) {
-        return new AppUserResponse(
-                u.getId(),
-                u.getTenantId(),
-                u.getPersonId(),
-                u.getEmail(),
-                u.getFullName(),
-                u.getProvider(),
-                u.getProviderSubject(),
-                u.getRole(),
-                u.getEnabled(),
-                u.getLastLoginAt(),
-                u.getCreatedAt(),
-                u.getUpdatedAt()
-        );
+    private void validateAssignableRole(AppUser manager, String role) {
+        if (!accessControlService.isAdmin(manager) && AccessControlService.ROLE_ADMIN.equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente administrador pode atribuir o perfil ADMIN.");
+        }
     }
 
-    private String normalizeActor(String actor) {
-        return (actor == null || actor.isBlank()) ? "system" : actor.trim();
+    private AppUser requireInTenant(UUID tenantId, UUID id) {
+        return repository.findByTenantIdAndIdAndDeletedFalse(tenantId, id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado."));
+    }
+
+    private AppUserResponse toResponse(AppUser u) {
+        return new AppUserResponse(u.getId(), u.getTenantId(), u.getPersonId(), u.getEmail(), u.getFullName(),
+                u.getProvider(), u.getProviderSubject(), u.getRole(), u.getEnabled(), u.getLastLoginAt(),
+                u.getCreatedAt(), u.getUpdatedAt());
+    }
+
+    private String actor(AppUser user) {
+        return clean(user.getEmail()) == null ? "system" : user.getEmail().trim();
+    }
+
+    private String normalizeEmail(String value) {
+        String email = clean(value);
+        if (email == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "E-mail é obrigatório.");
+        return email.toLowerCase(Locale.ROOT);
+    }
+
+    private String clean(String value) {
+        if (value == null) return null;
+        String cleaned = value.trim();
+        return cleaned.isBlank() ? null : cleaned;
     }
 }

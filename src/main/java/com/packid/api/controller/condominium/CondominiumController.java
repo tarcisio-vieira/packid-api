@@ -3,12 +3,19 @@ package com.packid.api.controller.condominium;
 import com.packid.api.controller.condominium.dto.CondominiumCreateRequest;
 import com.packid.api.controller.condominium.dto.CondominiumResponse;
 import com.packid.api.controller.condominium.dto.CondominiumUpdateRequest;
+import com.packid.api.domain.model.AppUser;
+import com.packid.api.service.AccessControlService;
+import com.packid.api.service.AuthenticatedUserService;
 import com.packid.api.service.CondominiumService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
@@ -20,54 +27,91 @@ import java.util.UUID;
 public class CondominiumController {
 
     private final CondominiumService service;
+    private final AuthenticatedUserService authenticatedUserService;
+    private final AccessControlService accessControlService;
 
-    public CondominiumController(CondominiumService service) {
+    public CondominiumController(
+            CondominiumService service,
+            AuthenticatedUserService authenticatedUserService,
+            AccessControlService accessControlService
+    ) {
         this.service = service;
+        this.authenticatedUserService = authenticatedUserService;
+        this.accessControlService = accessControlService;
     }
 
-    // GET /api/condominiums?tenantId=...
     @GetMapping
-    public ResponseEntity<List<CondominiumResponse>> getAll(@RequestParam @NotNull UUID tenantId) {
-        return ResponseEntity.ok(service.getAll(tenantId));
+    public ResponseEntity<List<CondominiumResponse>> getAll(
+            @AuthenticationPrincipal OidcUser principal,
+            @RequestParam(required = false) UUID tenantId
+    ) {
+        AppUser user = operationalUser(principal);
+        requireCurrentTenant(user, tenantId);
+        return ResponseEntity.ok(service.getAll(user.getTenantId()));
     }
 
-    // GET /api/condominiums/{id}?tenantId=...
     @GetMapping("/{id}")
-    public ResponseEntity<CondominiumResponse> getById(@RequestParam @NotNull UUID tenantId,
-                                                       @PathVariable UUID id) {
-        return ResponseEntity.ok(service.getById(tenantId, id));
+    public ResponseEntity<CondominiumResponse> getById(
+            @AuthenticationPrincipal OidcUser principal,
+            @RequestParam(required = false) UUID tenantId,
+            @PathVariable UUID id
+    ) {
+        AppUser user = operationalUser(principal);
+        requireCurrentTenant(user, tenantId);
+        return ResponseEntity.ok(service.getById(user.getTenantId(), id));
     }
 
-    // POST /api/condominiums
     @PostMapping
     public ResponseEntity<CondominiumResponse> create(
-            @RequestHeader(value = "X-Actor", required = false) String actor,
+            @AuthenticationPrincipal OidcUser principal,
             @Valid @RequestBody CondominiumCreateRequest request
     ) {
-        CondominiumResponse created = service.create(request, actor);
+        AppUser user = settingsManager(principal);
+        requireCurrentTenant(user, request.tenantId());
+        CondominiumResponse created = service.create(request, user.getEmail());
         URI location = URI.create("/api/condominiums/" + created.id() + "?tenantId=" + created.tenantId());
         return ResponseEntity.created(location).body(created);
     }
 
-    // PUT /api/condominiums/{id}?tenantId=...
     @PutMapping("/{id}")
     public ResponseEntity<CondominiumResponse> update(
-            @RequestParam @NotNull UUID tenantId,
+            @AuthenticationPrincipal OidcUser principal,
+            @RequestParam(required = false) UUID tenantId,
             @PathVariable UUID id,
-            @RequestHeader(value = "X-Actor", required = false) String actor,
             @Valid @RequestBody CondominiumUpdateRequest request
     ) {
-        return ResponseEntity.ok(service.update(tenantId, id, request, actor));
+        AppUser user = settingsManager(principal);
+        requireCurrentTenant(user, tenantId);
+        return ResponseEntity.ok(service.update(user.getTenantId(), id, request, user.getEmail()));
     }
 
-    // DELETE (lógico) /api/condominiums/{id}?tenantId=... -> 204
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> logicalDelete(
-            @RequestParam @NotNull UUID tenantId,
-            @PathVariable UUID id,
-            @RequestHeader(value = "X-Actor", required = false) String actor
+            @AuthenticationPrincipal OidcUser principal,
+            @RequestParam(required = false) UUID tenantId,
+            @PathVariable UUID id
     ) {
-        service.logicalDelete(tenantId, id, actor);
+        AppUser user = settingsManager(principal);
+        requireCurrentTenant(user, tenantId);
+        service.logicalDelete(user.getTenantId(), id, user.getEmail());
         return ResponseEntity.noContent().build();
+    }
+
+    private AppUser operationalUser(OidcUser principal) {
+        AppUser user = authenticatedUserService.requireAppUser(principal);
+        accessControlService.requireOperationalUser(user);
+        return user;
+    }
+
+    private AppUser settingsManager(OidcUser principal) {
+        AppUser user = authenticatedUserService.requireAppUser(principal);
+        accessControlService.requireSettingsManager(user);
+        return user;
+    }
+
+    private void requireCurrentTenant(AppUser user, UUID requestedTenantId) {
+        if (requestedTenantId != null && !user.getTenantId().equals(requestedTenantId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acesso a outro condomínio não é permitido.");
+        }
     }
 }

@@ -26,17 +26,20 @@ public class RegistryDocumentPhotoService {
     private final GoogleDrivePhotoService driveService;
     private final TenantGoogleAccountService googleAccountService;
     private final ImageCompressionService imageCompressionService;
+    private final AccessControlService accessControlService;
 
     public RegistryDocumentPhotoService(RegistryEntryRepository repository,
                                         AuthenticatedUserService authenticatedUserService,
                                         GoogleDrivePhotoService driveService,
                                         TenantGoogleAccountService googleAccountService,
-                                        ImageCompressionService imageCompressionService) {
+                                        ImageCompressionService imageCompressionService,
+                                        AccessControlService accessControlService) {
         this.repository = repository;
         this.authenticatedUserService = authenticatedUserService;
         this.driveService = driveService;
         this.googleAccountService = googleAccountService;
         this.imageCompressionService = imageCompressionService;
+        this.accessControlService = accessControlService;
     }
 
     public DocumentKind kind(String value) {
@@ -57,6 +60,7 @@ public class RegistryDocumentPhotoService {
                                 OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireSupportedEntry(appUser, entryId);
+        accessControlService.requireOperationalUser(appUser);
         ImageCompressionService.ProcessedImage processed = imageCompressionService.process(file);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
@@ -65,7 +69,14 @@ public class RegistryDocumentPhotoService {
         String currentOwner = owner(entry, kind);
         String oldFileId = fileId(entry, kind);
 
-        if (oldFileId != null && currentOwner != null && !sameEmail(currentOwner, uploadOwner) && !sameEmail(currentOwner, appUser.getEmail())) {
+        // Se a conta oficial foi trocada, permite gravar a nova imagem nela. O arquivo legado
+        // fica na conta anterior até eventual limpeza manual, mas o cadastro passa a apontar
+        // somente para o novo arquivo oficial.
+        boolean replacingLegacyIntoOfficialAccount = official != null;
+        if (oldFileId != null && currentOwner != null
+                && !sameEmail(currentOwner, uploadOwner)
+                && !sameEmail(currentOwner, appUser.getEmail())
+                && !replacingLegacyIntoOfficialAccount) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A imagem atual do documento está em outra conta Google. Reconecte a conta oficial antes de substituí-la.");
         }
@@ -95,6 +106,7 @@ public class RegistryDocumentPhotoService {
     public GoogleDrivePhotoService.PhotoContent download(OidcUser oidcUser, UUID entryId, DocumentKind kind,
                                                          OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireOperationalUser(appUser);
         RegistryEntry entry = requireSupportedEntry(appUser, entryId);
         String fileId = fileId(entry, kind);
         if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do documento não cadastrada.");
@@ -113,6 +125,7 @@ public class RegistryDocumentPhotoService {
     public RegistryEntry delete(OidcUser oidcUser, UUID entryId, DocumentKind kind, OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireSupportedEntry(appUser, entryId);
+        accessControlService.requireOperationalUser(appUser);
         String fileId = fileId(entry, kind);
         if (clean(fileId) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem do documento não cadastrada.");
 

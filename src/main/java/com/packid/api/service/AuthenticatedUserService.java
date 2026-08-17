@@ -2,11 +2,13 @@ package com.packid.api.service;
 
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.repository.AppUserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -18,6 +20,7 @@ public class AuthenticatedUserService {
         this.appUserRepository = appUserRepository;
     }
 
+    @Transactional
     public AppUser requireAppUser(OidcUser oidcUser) {
         if (oidcUser == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário não autenticado");
@@ -29,7 +32,7 @@ public class AuthenticatedUserService {
                     .findAllByProviderAndProviderSubjectAndDeletedFalse(AppUser.AuthProvider.GOOGLE, subject);
 
             if (bySubject.size() == 1) {
-                return validateEnabled(bySubject.get(0));
+                return touchLogin(validateEnabled(bySubject.get(0)));
             }
             if (bySubject.size() > 1) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -41,18 +44,31 @@ public class AuthenticatedUserService {
         if (email != null) {
             List<AppUser> byEmail = appUserRepository.findAllByEmailAndDeletedFalse(email);
             if (byEmail.size() == 1) {
-                return validateEnabled(byEmail.get(0));
+                AppUser appUser = validateEnabled(byEmail.get(0));
+                // Permite pré-cadastrar o e-mail (ex.: portaria) sem conhecer o subject do Google.
+                // No primeiro login OAuth2 o vínculo definitivo é gravado automaticamente.
+                if (subject != null && trimToNull(appUser.getProviderSubject()) == null) {
+                    appUser.setProvider(AppUser.AuthProvider.GOOGLE);
+                    appUser.setProviderSubject(subject);
+                    appUser.setUpdatedBy(email);
+                }
+                return touchLogin(appUser);
             }
             if (byEmail.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Usuário não cadastrado no PackID: " + email);
+                        "Usuário não cadastrado no VSGI Condomínio: " + email);
             }
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "E-mail associado a mais de um usuário PackID.");
+                    "E-mail associado a mais de um usuário VSGI Condomínio.");
         }
 
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
                 "Não foi possível identificar o usuário autenticado.");
+    }
+
+    private AppUser touchLogin(AppUser user) {
+        user.setLastLoginAt(LocalDateTime.now());
+        return appUserRepository.save(user);
     }
 
     private AppUser validateEnabled(AppUser user) {

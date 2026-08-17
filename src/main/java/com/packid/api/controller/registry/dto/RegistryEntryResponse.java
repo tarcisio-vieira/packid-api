@@ -36,6 +36,8 @@ public record RegistryEntryResponse(
         Boolean parkingSpaceRented,
         String parkingSpaceRentalNotes,
         String notes,
+        Boolean residentAccessEnabled,
+        String residentUsername,
         Boolean photoAvailable,
         Boolean photoOwnedByCurrentUser,
         String photoFileName,

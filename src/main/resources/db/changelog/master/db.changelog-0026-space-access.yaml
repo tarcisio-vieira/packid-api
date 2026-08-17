@@ -1,0 +1,152 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0026-space-access
+      author: openai
+      changes:
+        - createTable:
+            tableName: space_access_request
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: resident_registry_entry_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: occupancy_id
+                  type: uuid
+              - column:
+                  name: block
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: apartment
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: space_type
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: requested_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: released_at
+                  type: timestamp
+              - column:
+                  name: return_requested_at
+                  type: timestamp
+              - column:
+                  name: completed_at
+                  type: timestamp
+              - column:
+                  name: released_by
+                  type: varchar(255)
+              - column:
+                  name: completed_by
+                  type: varchar(255)
+              - column:
+                  name: notes
+                  type: text
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+              - column:
+                  name: deleted_at
+                  type: timestamp
+              - column:
+                  name: created_by
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: space_access_request
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_space_access_tenant
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: space_access_request
+            baseColumnNames: resident_registry_entry_id
+            referencedTableName: registry_entry
+            referencedColumnNames: id
+            constraintName: fk_space_access_resident
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: space_access_request
+            baseColumnNames: occupancy_id
+            referencedTableName: apartment_occupancy
+            referencedColumnNames: id
+            constraintName: fk_space_access_occupancy
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: space_access_request
+            indexName: idx_space_access_tenant_status
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: status
+              - column:
+                  name: requested_at
+        - createIndex:
+            tableName: space_access_request
+            indexName: idx_space_access_unit
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: block
+              - column:
+                  name: apartment
+              - column:
+                  name: requested_at
+        - createIndex:
+            tableName: space_access_request
+            indexName: idx_space_access_resident
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: resident_registry_entry_id
+              - column:
+                  name: requested_at

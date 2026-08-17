@@ -28,6 +28,7 @@ public class RegistryPhotoService {
     private final TenantGoogleAccountService googleAccountService;
     private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
     private final ImageCompressionService imageCompressionService;
+    private final AccessControlService accessControlService;
 
     public RegistryPhotoService(
             RegistryEntryRepository repository,
@@ -35,7 +36,8 @@ public class RegistryPhotoService {
             GoogleDrivePhotoService googleDrivePhotoService,
             TenantGoogleAccountService googleAccountService,
             UnitChangeNotificationPublisher unitChangeNotificationPublisher,
-            ImageCompressionService imageCompressionService
+            ImageCompressionService imageCompressionService,
+            AccessControlService accessControlService
     ) {
         this.repository = repository;
         this.authenticatedUserService = authenticatedUserService;
@@ -43,6 +45,7 @@ public class RegistryPhotoService {
         this.googleAccountService = googleAccountService;
         this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
         this.imageCompressionService = imageCompressionService;
+        this.accessControlService = accessControlService;
     }
 
     @Transactional
@@ -50,6 +53,7 @@ public class RegistryPhotoService {
                                 OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireEntry(appUser, entryId);
+        accessControlService.requireMutationPermission(appUser, entry.getEntryType());
         ImageCompressionService.ProcessedImage processed = imageCompressionService.process(file);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
@@ -57,9 +61,12 @@ public class RegistryPhotoService {
         String officialToken = official == null ? null : googleAccountService.freshAccessToken(appUser.getTenantId());
 
         String currentOwner = clean(entry.getPhotoOwnerEmail());
+        boolean replacingLegacyPhotoIntoOfficialAccount = official != null
+                && accessControlService.canManageProtectedRegistry(appUser);
         if (entry.getPhotoDriveFileId() != null && currentOwner != null
                 && !sameEmail(currentOwner, uploadOwner)
-                && !sameEmail(currentOwner, appUser.getEmail())) {
+                && !sameEmail(currentOwner, appUser.getEmail())
+                && !replacingLegacyPhotoIntoOfficialAccount) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A foto atual está em outra conta Google. Reconecte a conta oficial ou entre com a conta que fez o upload antes de substituí-la.");
         }
@@ -102,6 +109,7 @@ public class RegistryPhotoService {
             OidcUser oidcUser, UUID entryId, OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireEntry(appUser, entryId);
+        accessControlService.requireOperationalUser(appUser);
         requirePhoto(entry);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);
@@ -121,6 +129,7 @@ public class RegistryPhotoService {
                                 OAuth2AuthorizedClient authorizedClient) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
         RegistryEntry entry = requireEntry(appUser, entryId);
+        accessControlService.requireMutationPermission(appUser, entry.getEntryType());
         requirePhoto(entry);
 
         TenantGoogleAccount official = officialDriveAccount(appUser);

@@ -3,6 +3,7 @@ package com.packid.api.controller.registry.dto;
 import com.packid.api.controller.occupancy.dto.ApartmentOccupancyResponse;
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.servicerecord.dto.ServiceRecordResponse;
+import com.packid.api.controller.space.dto.SpaceAccessResponse;
 
 import java.util.List;
 
@@ -18,5 +19,6 @@ public record UnitRegistrySummaryResponse(
         List<VisitorVisitResponse> visits,
         List<DeliveryRecordResponse> deliveries,
         List<ServiceRecordResponse> serviceRecords,
-        List<PackIdRecentResponse> packIds
+        List<PackIdRecentResponse> packIds,
+        List<SpaceAccessResponse> spaceAccesses
 ) {}

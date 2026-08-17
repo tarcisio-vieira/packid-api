@@ -27,17 +27,20 @@ public class ApartmentOccupancyService {
     private final RegistryEntryRepository registryEntryRepository;
     private final AuthenticatedUserService authenticatedUserService;
     private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
+    private final AccessControlService accessControlService;
 
     public ApartmentOccupancyService(
             ApartmentOccupancyRepository repository,
             RegistryEntryRepository registryEntryRepository,
             AuthenticatedUserService authenticatedUserService,
-            UnitChangeNotificationPublisher unitChangeNotificationPublisher
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher,
+            AccessControlService accessControlService
     ) {
         this.repository = repository;
         this.registryEntryRepository = registryEntryRepository;
         this.authenticatedUserService = authenticatedUserService;
         this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
+        this.accessControlService = accessControlService;
     }
 
     public List<ApartmentOccupancyResponse> list(OidcUser oidcUser, String block, String apartment) {
@@ -82,6 +85,7 @@ public class ApartmentOccupancyService {
     @Transactional
     public ApartmentOccupancyResponse start(OidcUser oidcUser, ApartmentOccupancyStartRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireProtectedRegistryManager(appUser);
         ApartmentOccupancy created = startInternal(
                 appUser,
                 required(request.block(), "Bloco é obrigatório."),
@@ -129,6 +133,7 @@ public class ApartmentOccupancyService {
     @Transactional
     public ApartmentOccupancyResponse end(OidcUser oidcUser, ApartmentOccupancyEndRequest request) {
         AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        accessControlService.requireProtectedRegistryManager(appUser);
         String block = required(request.block(), "Bloco é obrigatório.");
         String apartment = required(request.apartment(), "Apartamento é obrigatório.");
         ApartmentOccupancy occupancy = findActive(appUser, block, apartment);

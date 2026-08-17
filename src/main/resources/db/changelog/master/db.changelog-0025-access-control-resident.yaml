@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0025-access-control-resident
+      author: openai
+      changes:
+        - dropNotNullConstraint:
+            tableName: app_user
+            columnName: provider_subject
+            columnDataType: varchar(255)
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: resident_username
+                  type: varchar(100)
+              - column:
+                  name: resident_password_hash
+                  type: varchar(255)
+        - addUniqueConstraint:
+            tableName: registry_entry
+            columnNames: tenant_id,resident_username
+            constraintName: uq_registry_entry_tenant_resident_username
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_resident_login
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: resident_username
+              - column:
+                  name: entry_type
+              - column:
+                  name: active
+              - column:
+                  name: deleted
