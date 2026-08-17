@@ -80,6 +80,7 @@ public class CondominiumSettingsService {
         condominium.setWhatsapp(clean(request.whatsapp()));
         condominium.setNotes(clean(request.notes()));
         condominium.setEmailNotificationsEnabled(!Boolean.FALSE.equals(request.emailNotificationsEnabled()));
+        condominium.setResidentCredentialEmailsEnabled(Boolean.TRUE.equals(request.residentCredentialEmailsEnabled()));
         condominium.setPackIdPrintTwoLabels(!Boolean.FALSE.equals(request.packIdPrintTwoLabels()));
         condominiumRepository.save(condominium);
 
@@ -145,6 +146,7 @@ public class CondominiumSettingsService {
                 c == null ? null : c.getWhatsapp(),
                 c == null ? null : c.getNotes(),
                 c == null || !Boolean.FALSE.equals(c.getEmailNotificationsEnabled()),
+                c != null && Boolean.TRUE.equals(c.getResidentCredentialEmailsEnabled()),
                 c == null || !Boolean.FALSE.equals(c.getPackIdPrintTwoLabels()),
                 google
         );

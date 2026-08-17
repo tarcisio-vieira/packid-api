@@ -12,6 +12,7 @@ import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
 import com.packid.api.domain.model.Person;
 import com.packid.api.domain.repository.RegistryEntryRepository;
+import com.packid.api.domain.repository.ApartmentOccupancyRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
 import com.packid.api.domain.repository.ServiceCompanyRepository;
@@ -33,6 +34,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.security.SecureRandom;
+import java.util.Locale;
 
 @Service
 public class RegistryEntryService {
@@ -51,6 +54,10 @@ public class RegistryEntryService {
     private final AccessControlService accessControlService;
     private final PasswordEncoder passwordEncoder;
     private final SpaceAccessService spaceAccessService;
+    private final ApartmentOccupancyRepository occupancyRepository;
+    private final ResidentCredentialEmailService residentCredentialEmailService;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
     public RegistryEntryService(
             RegistryEntryRepository repository,
@@ -66,7 +73,9 @@ public class RegistryEntryService {
             ServiceCompanyRepository serviceCompanyRepository,
             AccessControlService accessControlService,
             PasswordEncoder passwordEncoder,
-            SpaceAccessService spaceAccessService
+            SpaceAccessService spaceAccessService,
+            ApartmentOccupancyRepository occupancyRepository,
+            ResidentCredentialEmailService residentCredentialEmailService
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -82,6 +91,8 @@ public class RegistryEntryService {
         this.accessControlService = accessControlService;
         this.passwordEncoder = passwordEncoder;
         this.spaceAccessService = spaceAccessService;
+        this.occupancyRepository = occupancyRepository;
+        this.residentCredentialEmailService = residentCredentialEmailService;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -285,15 +296,20 @@ public class RegistryEntryService {
         }
 
         apply(entry, request);
-        applyResidentAccess(appUser, entry, request);
         syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
+        ResidentCredentialChange residentCredentialChange = applyResidentAccess(appUser, entry, request);
         syncResidentPerson(appUser, entry);
         if (existing) {
             entry.setUpdatedBy(actor(appUser));
         }
 
         RegistryEntry saved = repository.save(entry);
+        if (residentCredentialChange != null && saved.getOccupancyId() != null) {
+            ApartmentOccupancy accessOccupancy = occupancyRepository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), saved.getOccupancyId()).orElse(null);
+            residentCredentialEmailService.sendIfEnabled(appUser.getTenantId(), accessOccupancy,
+                    residentCredentialChange.plainPassword(), residentCredentialChange.reset());
+        }
         if (existing) {
             notifyUpdated(appUser, before, saved);
         } else {
@@ -314,12 +330,17 @@ public class RegistryEntryService {
 
         EntrySnapshot before = snapshot(entry);
         apply(entry, request);
-        applyResidentAccess(appUser, entry, request);
         syncServiceCompany(appUser, entry);
         syncOccupancy(appUser, entry);
+        ResidentCredentialChange residentCredentialChange = applyResidentAccess(appUser, entry, request);
         syncResidentPerson(appUser, entry);
         entry.setUpdatedBy(actor(appUser));
         RegistryEntry saved = repository.save(entry);
+        if (residentCredentialChange != null && saved.getOccupancyId() != null) {
+            ApartmentOccupancy accessOccupancy = occupancyRepository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), saved.getOccupancyId()).orElse(null);
+            residentCredentialEmailService.sendIfEnabled(appUser.getTenantId(), accessOccupancy,
+                    residentCredentialChange.plainPassword(), residentCredentialChange.reset());
+        }
         notifyUpdated(appUser, before, saved);
         return toResponse(saved, appUser, officialGoogleEmail);
     }
@@ -414,50 +435,89 @@ public class RegistryEntryService {
         }
     }
 
-    private void applyResidentAccess(AppUser appUser, RegistryEntry entry, RegistryEntryRequest request) {
-        if (entry.getEntryType() != EntryType.RESIDENT) {
-            entry.setResidentUsername(null);
-            entry.setResidentPasswordHash(null);
-            return;
-        }
+    private ResidentCredentialChange applyResidentAccess(AppUser appUser, RegistryEntry entry, RegistryEntryRequest request) {
+        // A credencial é da ocupação/unidade, e não de uma pessoa específica.
+        // Mantemos as colunas antigas de RegistryEntry apenas por compatibilidade de banco, sempre vazias daqui em diante.
+        entry.setResidentUsername(null);
+        entry.setResidentPasswordHash(null);
+        if (entry.getEntryType() != EntryType.RESIDENT || entry.getOccupancyId() == null) return null;
+
+        ApartmentOccupancy occupancy = occupancyRepository
+                .findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), entry.getOccupancyId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Ocupação da unidade não encontrada."));
+        boolean accessExisted = Boolean.TRUE.equals(occupancy.getResidentAccessEnabled())
+                && clean(occupancy.getResidentPasswordHash()) != null;
 
         boolean enabled = Boolean.TRUE.equals(request.residentAccessEnabled());
+        // Ao incluir outro condômino em uma unidade que já possui acesso liberado, o formulário
+        // novo inicia com o switch desligado. Não devemos interpretar esse valor padrão como uma
+        // ordem para revogar a credencial compartilhada da unidade.
+        if (entry.getId() == null && Boolean.TRUE.equals(occupancy.getResidentAccessEnabled()) && !enabled) {
+            return null;
+        }
+
+        occupancy.setCredentialEmailEnabled(Boolean.TRUE.equals(request.residentCredentialEmailEnabled()));
         if (!enabled) {
-            entry.setResidentUsername(null);
-            entry.setResidentPasswordHash(null);
-            return;
+            occupancy.setResidentAccessEnabled(false);
+            occupancy.setResidentUsername(null);
+            occupancy.setResidentPasswordHash(null);
+            occupancy.setResidentMustChangePassword(true);
+            occupancy.setCredentialEmailEnabled(false);
+            occupancy.setUpdatedBy(actor(appUser));
+            occupancyRepository.save(occupancy);
+            return null;
         }
 
         String username = clean(request.residentUsername());
-        if (username == null || username.length() < 4) {
+        if (username == null) username = defaultResidentUsername(occupancy.getBlock(), occupancy.getApartment());
+        username = username.toLowerCase(Locale.ROOT);
+        if (username.length() < 4 || username.length() > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Informe um usuário de acesso do morador com pelo menos 4 caracteres.");
+                    "O usuário de acesso deve ter entre 4 e 100 caracteres.");
         }
-        username = username.toLowerCase(java.util.Locale.ROOT);
-        if (username.length() > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuário do morador muito longo.");
-        }
-
-        RegistryEntry conflicting = repository
+        ApartmentOccupancy conflict = occupancyRepository
                 .findByTenantIdAndResidentUsernameIgnoreCaseAndDeletedFalse(appUser.getTenantId(), username)
                 .orElse(null);
-        if (conflicting != null && (entry.getId() == null || !conflicting.getId().equals(entry.getId()))) {
+        if (conflict != null && !conflict.getId().equals(occupancy.getId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Este usuário de acesso já está sendo usado por outro condômino.");
+                    "Este usuário de acesso já está sendo usado por outra unidade/ocupação.");
         }
 
-        String password = request.residentPassword();
-        if (password != null && !password.isBlank()) {
-            if (password.length() < 6) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "A senha do morador deve ter pelo menos 6 caracteres.");
-            }
-            entry.setResidentPasswordHash(passwordEncoder.encode(password));
-        } else if (clean(entry.getResidentPasswordHash()) == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Informe uma senha para liberar o primeiro acesso do morador.");
+        String plainPassword = request.residentPassword();
+        if (plainPassword != null && plainPassword.isBlank()) plainPassword = null;
+        if (plainPassword == null && clean(occupancy.getResidentPasswordHash()) == null) {
+            plainPassword = generateTemporaryPassword();
         }
-        entry.setResidentUsername(username);
+        if (plainPassword != null) {
+            if (plainPassword.length() < 8) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "A senha de acesso deve ter pelo menos 8 caracteres.");
+            }
+            occupancy.setResidentPasswordHash(passwordEncoder.encode(plainPassword));
+            occupancy.setResidentMustChangePassword(true);
+        }
+
+        occupancy.setResidentAccessEnabled(true);
+        occupancy.setResidentUsername(username);
+        occupancy.setUpdatedBy(actor(appUser));
+        occupancyRepository.save(occupancy);
+        return plainPassword == null ? null : new ResidentCredentialChange(plainPassword, accessExisted);
+    }
+
+    private record ResidentCredentialChange(String plainPassword, boolean reset) {}
+
+    private String defaultResidentUsername(String block, String apartment) {
+        String value = (clean(block) == null ? "" : clean(block)) + (clean(apartment) == null ? "" : clean(apartment));
+        value = value.replaceAll("[^A-Za-z0-9._-]", "");
+        return value.length() >= 4 ? value : "unidade" + value;
+    }
+
+    private String generateTemporaryPassword() {
+        StringBuilder value = new StringBuilder(10);
+        for (int i = 0; i < 10; i++) {
+            value.append(PASSWORD_ALPHABET.charAt(SECURE_RANDOM.nextInt(PASSWORD_ALPHABET.length())));
+        }
+        return value.toString();
     }
 
     private void syncServiceCompany(AppUser appUser, RegistryEntry entry) {
@@ -800,6 +860,11 @@ public class RegistryEntryService {
     }
 
     private RegistryEntryResponse toResponse(RegistryEntry entry, AppUser appUser, String officialGoogleEmail) {
+        ApartmentOccupancy residentOccupancy = entry.getEntryType() == EntryType.RESIDENT && entry.getOccupancyId() != null
+                ? occupancyRepository.findByTenantIdAndIdAndDeletedFalse(entry.getTenantId(), entry.getOccupancyId()).orElse(null)
+                : null;
+        boolean residentAccessEnabled = residentOccupancy != null && Boolean.TRUE.equals(residentOccupancy.getResidentAccessEnabled())
+                && clean(residentOccupancy.getResidentUsername()) != null && clean(residentOccupancy.getResidentPasswordHash()) != null;
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),
@@ -830,8 +895,10 @@ public class RegistryEntryService {
                 entry.getParkingSpaceRented(),
                 entry.getParkingSpaceRentalNotes(),
                 entry.getNotes(),
-                clean(entry.getResidentUsername()) != null && clean(entry.getResidentPasswordHash()) != null,
-                entry.getResidentUsername(),
+                residentAccessEnabled,
+                residentOccupancy == null ? null : residentOccupancy.getResidentUsername(),
+                residentOccupancy != null && Boolean.TRUE.equals(residentOccupancy.getResidentMustChangePassword()),
+                residentOccupancy != null && Boolean.TRUE.equals(residentOccupancy.getCredentialEmailEnabled()),
                 entry.getPhotoDriveFileId() != null && !entry.getPhotoDriveFileId().isBlank(),
                 (appUser != null && sameEmail(entry.getPhotoOwnerEmail(), appUser.getEmail()))
                         || sameEmail(entry.getPhotoOwnerEmail(), officialGoogleEmail),

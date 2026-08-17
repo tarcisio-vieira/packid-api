@@ -114,31 +114,32 @@ public class SpaceAccessService {
             SpaceAccessRequest.SpaceType spaceType
     ) {
         RegistryEntry resident = context.resident();
+        var occupancy = context.occupancy();
         UUID tenantId = context.tenant().getId();
 
         SpaceAccessRequest current = repository
-                .findFirstByTenantIdAndResidentRegistryEntryIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtDesc(
-                        tenantId, resident.getId(), spaceType, ACTIVE_STATUSES)
+                .findFirstByTenantIdAndOccupancyIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtDesc(
+                        tenantId, occupancy.getId(), spaceType, ACTIVE_STATUSES)
                 .orElse(null);
 
         if (current == null) {
             SpaceAccessRequest request = new SpaceAccessRequest();
             request.setTenantId(tenantId);
             request.setResidentRegistryEntryId(resident.getId());
-            request.setOccupancyId(resident.getOccupancyId());
-            request.setBlock(requiredUnit(resident.getBlock(), "Bloco não definido no cadastro do morador."));
-            request.setApartment(requiredUnit(resident.getApartment(), "Apartamento não definido no cadastro do morador."));
+            request.setOccupancyId(occupancy.getId());
+            request.setBlock(requiredUnit(occupancy.getBlock(), "Bloco não definido para a ocupação."));
+            request.setApartment(requiredUnit(occupancy.getApartment(), "Apartamento não definido para a ocupação."));
             request.setSpaceType(spaceType);
             request.setStatus(SpaceAccessRequest.Status.REQUESTED_PICKUP);
             request.setRequestedAt(LocalDateTime.now());
-            request.setCreatedBy("morador:" + resident.getResidentUsername());
+            request.setCreatedBy("morador:" + occupancy.getResidentUsername());
             return toResponse(repository.save(request), tenantId);
         }
 
         if (current.getStatus() == SpaceAccessRequest.Status.IN_USE) {
             current.setStatus(SpaceAccessRequest.Status.REQUESTED_RETURN);
             current.setReturnRequestedAt(LocalDateTime.now());
-            current.setUpdatedBy("morador:" + resident.getResidentUsername());
+            current.setUpdatedBy("morador:" + occupancy.getResidentUsername());
             return toResponse(repository.save(current), tenantId);
         }
 
@@ -147,8 +148,8 @@ public class SpaceAccessService {
     }
 
     public List<SpaceAccessResponse> residentHistory(ResidentSessionService.ResidentContext context) {
-        return repository.findAllByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByRequestedAtDesc(
-                        context.tenant().getId(), context.resident().getId())
+        return repository.findAllByTenantIdAndOccupancyIdAndDeletedFalseOrderByRequestedAtDesc(
+                        context.tenant().getId(), context.occupancy().getId())
                 .stream().map(item -> toResponse(item, context.tenant().getId())).toList();
     }
 

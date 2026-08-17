@@ -24,6 +24,13 @@ public interface SpaceAccessRequestRepository extends JpaRepository<SpaceAccessR
             UUID tenantId, UUID residentRegistryEntryId, SpaceAccessRequest.SpaceType spaceType,
             List<SpaceAccessRequest.Status> statuses);
 
+    Optional<SpaceAccessRequest> findFirstByTenantIdAndOccupancyIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtDesc(
+            UUID tenantId, UUID occupancyId, SpaceAccessRequest.SpaceType spaceType,
+            List<SpaceAccessRequest.Status> statuses);
+
+    List<SpaceAccessRequest> findAllByTenantIdAndOccupancyIdAndDeletedFalseOrderByRequestedAtDesc(
+            UUID tenantId, UUID occupancyId);
+
     @Query("""
             select s from SpaceAccessRequest s
              where s.tenantId = :tenantId

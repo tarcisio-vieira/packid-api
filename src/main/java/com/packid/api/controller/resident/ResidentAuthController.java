@@ -1,6 +1,7 @@
 package com.packid.api.controller.resident;
 
 import com.packid.api.controller.resident.dto.ResidentLoginRequest;
+import com.packid.api.controller.resident.dto.ResidentCredentialsUpdateRequest;
 import com.packid.api.controller.resident.dto.ResidentSessionResponse;
 import com.packid.api.service.ResidentSessionService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,6 +28,14 @@ public class ResidentAuthController {
     @GetMapping("/me")
     public ResidentSessionResponse me(HttpSession session) {
         return residentSessionService.current(session);
+    }
+
+    @PutMapping("/credentials")
+    public ResidentSessionResponse updateCredentials(
+            HttpSession session,
+            @RequestBody ResidentCredentialsUpdateRequest request
+    ) {
+        return residentSessionService.updateCredentials(session, request);
     }
 
     @PostMapping("/logout")

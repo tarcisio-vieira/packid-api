@@ -38,6 +38,8 @@ public record RegistryEntryResponse(
         String notes,
         Boolean residentAccessEnabled,
         String residentUsername,
+        Boolean residentMustChangePassword,
+        Boolean residentCredentialEmailEnabled,
         Boolean photoAvailable,
         Boolean photoOwnedByCurrentUser,
         String photoFileName,

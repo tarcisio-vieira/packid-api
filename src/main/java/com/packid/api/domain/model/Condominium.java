@@ -66,6 +66,9 @@ public class Condominium extends AuditableEntity {
     @Column(name = "email_notifications_enabled", nullable = false)
     private Boolean emailNotificationsEnabled = Boolean.TRUE;
 
+    @Column(name = "resident_credential_emails_enabled", nullable = false)
+    private Boolean residentCredentialEmailsEnabled = Boolean.FALSE;
+
     @Column(name = "packid_print_two_labels", nullable = false)
     private Boolean packIdPrintTwoLabels = Boolean.TRUE;
 

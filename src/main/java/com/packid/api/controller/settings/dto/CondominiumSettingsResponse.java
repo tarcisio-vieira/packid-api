@@ -19,6 +19,7 @@ public record CondominiumSettingsResponse(
         String whatsapp,
         String notes,
         boolean emailNotificationsEnabled,
+        boolean residentCredentialEmailsEnabled,
         boolean packIdPrintTwoLabels,
         GoogleAccountSettingsResponse googleAccount
 ) {}

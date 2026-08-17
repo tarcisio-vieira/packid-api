@@ -33,4 +33,10 @@ public interface ApartmentOccupancyRepository extends JpaRepository<ApartmentOcc
             String block,
             String apartment
     );
+
+    Optional<ApartmentOccupancy> findByTenantIdAndResidentUsernameIgnoreCaseAndResidentAccessEnabledTrueAndStatusAndDeletedFalse(
+            UUID tenantId, String residentUsername, ApartmentOccupancy.Status status);
+
+    Optional<ApartmentOccupancy> findByTenantIdAndResidentUsernameIgnoreCaseAndDeletedFalse(
+            UUID tenantId, String residentUsername);
 }

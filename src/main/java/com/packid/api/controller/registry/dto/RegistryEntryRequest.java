@@ -37,5 +37,6 @@ public record RegistryEntryRequest(
         Boolean residentAccessEnabled,
         String residentUsername,
         String residentPassword,
+        Boolean residentCredentialEmailEnabled,
         Boolean active
 ) {}

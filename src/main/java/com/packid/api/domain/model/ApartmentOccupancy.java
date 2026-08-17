@@ -40,6 +40,21 @@ public class ApartmentOccupancy extends AuditableEntity {
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
 
+    @Column(name = "resident_access_enabled", nullable = false)
+    private Boolean residentAccessEnabled = Boolean.FALSE;
+
+    @Column(name = "resident_username", length = 100)
+    private String residentUsername;
+
+    @Column(name = "resident_password_hash", length = 255)
+    private String residentPasswordHash;
+
+    @Column(name = "resident_must_change_password", nullable = false)
+    private Boolean residentMustChangePassword = Boolean.TRUE;
+
+    @Column(name = "credential_email_enabled", nullable = false)
+    private Boolean credentialEmailEnabled = Boolean.FALSE;
+
     public enum Status {
         ACTIVE,
         SCHEDULED,

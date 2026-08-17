@@ -12,5 +12,9 @@ public record ApartmentOccupancyResponse(
         LocalDate startDate,
         LocalDate endDate,
         ApartmentOccupancy.Status status,
-        String notes
+        String notes,
+        boolean residentAccessEnabled,
+        String residentUsername,
+        boolean residentMustChangePassword,
+        boolean credentialEmailEnabled
 ) {}

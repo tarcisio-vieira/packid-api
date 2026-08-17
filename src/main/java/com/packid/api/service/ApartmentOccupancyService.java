@@ -151,6 +151,13 @@ public class ApartmentOccupancyService {
 
         occupancy.setEndDate(endDate);
         occupancy.setStatus(ApartmentOccupancy.Status.ENDED);
+        // Credenciais pertencem à ocupação atual, não ao imóvel para sempre.
+        // Ao encerrar uma ocupação, o acesso é revogado para que o próximo morador receba novas credenciais.
+        occupancy.setResidentAccessEnabled(false);
+        occupancy.setResidentUsername(null);
+        occupancy.setResidentPasswordHash(null);
+        occupancy.setResidentMustChangePassword(true);
+        occupancy.setCredentialEmailEnabled(false);
         occupancy.setUpdatedBy(actor(appUser));
         ApartmentOccupancy saved = repository.save(occupancy);
 
@@ -250,7 +257,11 @@ public class ApartmentOccupancyService {
                 occupancy.getStartDate(),
                 occupancy.getEndDate(),
                 occupancy.getStatus(),
-                occupancy.getNotes()
+                occupancy.getNotes(),
+                Boolean.TRUE.equals(occupancy.getResidentAccessEnabled()),
+                occupancy.getResidentUsername(),
+                Boolean.TRUE.equals(occupancy.getResidentMustChangePassword()),
+                Boolean.TRUE.equals(occupancy.getCredentialEmailEnabled())
         );
     }
 

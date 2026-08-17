@@ -1,6 +1,8 @@
 package com.packid.api.controller.resident;
 
 import com.packid.api.controller.resident.dto.ResidentPortalResponse;
+import com.packid.api.controller.resident.dto.ResidentProfileUpdateRequest;
+import com.packid.api.controller.registry.dto.RegistryEntryResponse;
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
 import com.packid.api.domain.model.SpaceAccessRequest;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
@@ -10,6 +12,8 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +47,22 @@ public class ResidentPortalController {
                 .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
                 .header("X-Content-Type-Options", "nosniff")
                 .body(photo.bytes());
+    }
+
+    @PutMapping("/profile/{entryId}")
+    public RegistryEntryResponse updateProfile(
+            HttpSession session, @PathVariable UUID entryId,
+            @Valid @RequestBody ResidentProfileUpdateRequest request
+    ) {
+        return service.updateProfile(session, entryId, request);
+    }
+
+    @PutMapping(path = "/profile/{entryId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public RegistryEntryResponse uploadProfilePhoto(
+            HttpSession session, @PathVariable UUID entryId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return service.uploadProfilePhoto(session, entryId, file);
     }
 
     @GetMapping("/spaces")
