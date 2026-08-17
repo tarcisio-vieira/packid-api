@@ -4,6 +4,7 @@ import com.packid.api.controller.occupancy.dto.ApartmentOccupancyResponse;
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.registry.dto.RegistryEntryRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
+import com.packid.api.controller.registry.dto.RegistryEntryPageResponse;
 import com.packid.api.controller.registry.dto.UnitRegistrySummaryResponse;
 import com.packid.api.domain.model.ApartmentOccupancy;
 import com.packid.api.domain.model.AppUser;
@@ -17,6 +18,8 @@ import com.packid.api.domain.repository.ServiceCompanyRepository;
 import com.packid.api.service.notification.UnitChangeNotificationPublisher;
 import com.packid.api.integration.google.TenantGoogleAccountService;
 import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
@@ -79,6 +82,75 @@ public class RegistryEntryService {
 
         String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
         return entries.stream().map(entry -> toResponse(entry, appUser, officialGoogleEmail)).toList();
+    }
+
+
+    public RegistryEntryPageResponse getPage(
+            OidcUser oidcUser,
+            EntryType entryType,
+            String search,
+            boolean includeInactive,
+            int page,
+            int size,
+            String sortField,
+            String sortDirection
+    ) {
+        AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        if (entryType == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de cadastro é obrigatório.");
+        }
+
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(5, Math.min(size, 100));
+        String safeSortField = "name".equalsIgnoreCase(sortField) ? "name" : "unit";
+        String safeSortDirection = "desc".equalsIgnoreCase(sortDirection) ? "desc" : "asc";
+        String normalizedSearch = normalizeSearch(search);
+
+        Page<RegistryEntry> result = repository.searchPage(
+                appUser.getTenantId(),
+                entryType.name(),
+                includeInactive,
+                normalizedSearch,
+                safeSortField,
+                safeSortDirection,
+                PageRequest.of(safePage, safeSize)
+        );
+
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
+        List<RegistryEntryResponse> content = result.getContent().stream()
+                .map(entry -> toResponse(entry, appUser, officialGoogleEmail))
+                .toList();
+
+        return new RegistryEntryPageResponse(
+                content,
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.getNumber(),
+                result.getSize()
+        );
+    }
+
+    public List<RegistryEntryResponse> getUnitVehicles(
+            OidcUser oidcUser,
+            String block,
+            String apartment,
+            UUID occupancyId
+    ) {
+        AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        String cleanedBlock = cleanRequiredUnit(block, "Bloco é obrigatório.");
+        String cleanedApartment = cleanRequiredUnit(apartment, "Apartamento é obrigatório.");
+
+        List<RegistryEntry> vehicles;
+        if (occupancyId != null) {
+            vehicles = repository.findAllByTenantIdAndOccupancyIdAndEntryTypeAndActiveTrueAndDeletedFalseOrderByNameAsc(
+                    appUser.getTenantId(), occupancyId, EntryType.VEHICLE);
+        } else {
+            vehicles = repository.findAllByTenantIdAndEntryTypeAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
+                    appUser.getTenantId(), EntryType.VEHICLE, cleanedBlock, cleanedApartment);
+        }
+
+        String officialGoogleEmail = googleAccountService.getOfficialEmail(appUser.getTenantId());
+        return vehicles.stream().map(entry -> toResponse(entry, appUser, officialGoogleEmail)).toList();
     }
 
     public RegistryEntryResponse getById(OidcUser oidcUser, UUID id) {
@@ -723,6 +795,14 @@ public class RegistryEntryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nome/identificação é obrigatório.");
         }
         return cleaned;
+    }
+
+    private String normalizeSearch(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null) return "";
+        return java.text.Normalizer.normalize(cleaned, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(java.util.Locale.ROOT);
     }
 
     private String clean(String value) {

@@ -2,6 +2,7 @@ package com.packid.api.controller.registry;
 
 import com.packid.api.controller.registry.dto.RegistryEntryRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
+import com.packid.api.controller.registry.dto.RegistryEntryPageResponse;
 import com.packid.api.controller.registry.dto.UnitRegistrySummaryResponse;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
@@ -46,6 +47,30 @@ public class RegistryEntryController {
         return ResponseEntity.ok(service.getAll(user, type));
     }
 
+
+    @GetMapping("/page")
+    public ResponseEntity<RegistryEntryPageResponse> getPage(
+            @AuthenticationPrincipal OidcUser user,
+            @RequestParam EntryType type,
+            @RequestParam(required = false, defaultValue = "") String search,
+            @RequestParam(required = false, defaultValue = "false") boolean includeInactive,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int size,
+            @RequestParam(required = false, defaultValue = "unit") String sort,
+            @RequestParam(required = false, defaultValue = "asc") String direction
+    ) {
+        return ResponseEntity.ok(service.getPage(user, type, search, includeInactive, page, size, sort, direction));
+    }
+
+    @GetMapping("/unit-vehicles")
+    public ResponseEntity<List<RegistryEntryResponse>> getUnitVehicles(
+            @AuthenticationPrincipal OidcUser user,
+            @RequestParam String block,
+            @RequestParam String apartment,
+            @RequestParam(required = false) UUID occupancyId
+    ) {
+        return ResponseEntity.ok(service.getUnitVehicles(user, block, apartment, occupancyId));
+    }
 
     @GetMapping("/unit-summary")
     public ResponseEntity<UnitRegistrySummaryResponse> getUnitSummary(

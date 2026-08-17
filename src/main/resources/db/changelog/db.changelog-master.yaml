@@ -47,3 +47,5 @@ databaseChangeLog:
       file: db/changelog/master/db.changelog-0022-packid-label-print-settings.yaml
   - include:
       file: db/changelog/master/db.changelog-0023-single-document-photo.yaml
+  - include:
+      file: db/changelog/master/db.changelog-0024-registry-performance.yaml

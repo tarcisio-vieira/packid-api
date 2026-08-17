@@ -2,6 +2,8 @@ package com.packid.api.domain.repository;
 
 import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.model.RegistryEntry.EntryType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,11 +21,107 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
     List<RegistryEntry> findAllByTenantIdAndDeletedFalseOrderByNameAsc(UUID tenantId);
     List<RegistryEntry> findAllByTenantIdAndEntryTypeAndDeletedFalseOrderByNameAsc(UUID tenantId, EntryType entryType);
 
+
+    @Query(value = """
+            SELECT re.*
+              FROM registry_entry re
+             WHERE re.tenant_id = :tenantId
+               AND re.entry_type = :entryType
+               AND re.deleted = false
+               AND (:includeInactive = true OR re.active = true)
+               AND (
+                    :search = ''
+                    OR translate(lower(concat_ws(' ',
+                        re.name,
+                        re.document,
+                        re.phone,
+                        re.email,
+                        re.block,
+                        re.apartment,
+                        coalesce(re.block, '') || coalesce(re.apartment, ''),
+                        re.company,
+                        re.owner_name,
+                        re.brand,
+                        re.model,
+                        re.color,
+                        re.identifier,
+                        re.species,
+                        re.breed,
+                        re.parking_space,
+                        re.notes
+                    )), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')
+                    LIKE concat('%', :search, '%')
+               )
+             ORDER BY
+               CASE WHEN :sortField = 'name' AND :sortDirection = 'asc'
+                    THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END ASC,
+               CASE WHEN :sortField = 'name' AND :sortDirection = 'desc'
+                    THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END DESC,
+               CASE WHEN :sortField = 'unit' AND :sortDirection = 'asc'
+                    THEN CASE WHEN coalesce(re.block, '') ~ '^[0-9]+$' THEN lpad(re.block, 20, '0') ELSE lower(coalesce(re.block, '')) END END ASC,
+               CASE WHEN :sortField = 'unit' AND :sortDirection = 'asc'
+                    THEN CASE WHEN coalesce(re.apartment, '') ~ '^[0-9]+$' THEN lpad(re.apartment, 20, '0') ELSE lower(coalesce(re.apartment, '')) END END ASC,
+               CASE WHEN :sortField = 'unit' AND :sortDirection = 'desc'
+                    THEN CASE WHEN coalesce(re.block, '') ~ '^[0-9]+$' THEN lpad(re.block, 20, '0') ELSE lower(coalesce(re.block, '')) END END DESC,
+               CASE WHEN :sortField = 'unit' AND :sortDirection = 'desc'
+                    THEN CASE WHEN coalesce(re.apartment, '') ~ '^[0-9]+$' THEN lpad(re.apartment, 20, '0') ELSE lower(coalesce(re.apartment, '')) END END DESC,
+               CASE WHEN :sortField = 'unit'
+                    THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END ASC,
+               re.id ASC
+            """,
+            countQuery = """
+            SELECT count(*)
+              FROM registry_entry re
+             WHERE re.tenant_id = :tenantId
+               AND re.entry_type = :entryType
+               AND re.deleted = false
+               AND (:includeInactive = true OR re.active = true)
+               AND (:sortField = :sortField)
+               AND (:sortDirection = :sortDirection)
+               AND (
+                    :search = ''
+                    OR translate(lower(concat_ws(' ',
+                        re.name,
+                        re.document,
+                        re.phone,
+                        re.email,
+                        re.block,
+                        re.apartment,
+                        coalesce(re.block, '') || coalesce(re.apartment, ''),
+                        re.company,
+                        re.owner_name,
+                        re.brand,
+                        re.model,
+                        re.color,
+                        re.identifier,
+                        re.species,
+                        re.breed,
+                        re.parking_space,
+                        re.notes
+                    )), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')
+                    LIKE concat('%', :search, '%')
+               )
+            """,
+            nativeQuery = true)
+    Page<RegistryEntry> searchPage(
+            @Param("tenantId") UUID tenantId,
+            @Param("entryType") String entryType,
+            @Param("includeInactive") boolean includeInactive,
+            @Param("search") String search,
+            @Param("sortField") String sortField,
+            @Param("sortDirection") String sortDirection,
+            Pageable pageable
+    );
+
     List<RegistryEntry> findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByNameAsc(
             UUID tenantId, String block, String apartment);
 
     List<RegistryEntry> findAllByTenantIdAndOccupancyIdAndDeletedFalseOrderByNameAsc(
             UUID tenantId, UUID occupancyId);
+
+
+    List<RegistryEntry> findAllByTenantIdAndOccupancyIdAndEntryTypeAndActiveTrueAndDeletedFalseOrderByNameAsc(
+            UUID tenantId, UUID occupancyId, EntryType entryType);
 
     List<RegistryEntry> findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalseOrderByNameAsc(
             UUID tenantId, String block, String apartment);
