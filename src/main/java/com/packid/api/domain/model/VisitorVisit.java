@@ -21,10 +21,7 @@ public class VisitorVisit extends AuditableEntity {
     private UUID visitorRegistryEntryId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "visitor_registry_entry_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "visitor_registry_entry_id", referencedColumnName = "id", insertable = false, updatable = false)
     private RegistryEntry visitor;
 
     @Column(name = "block", nullable = false, length = 30)

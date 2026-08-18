@@ -32,10 +32,12 @@ public class RegistryEntry extends AuditableEntity {
     private ApartmentOccupancy occupancy;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "person_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(
+            name = "person_id",
+            referencedColumnName = "id",
+            insertable = false,
+            updatable = false
+    )
     private Person person;
 
     @Enumerated(EnumType.STRING)

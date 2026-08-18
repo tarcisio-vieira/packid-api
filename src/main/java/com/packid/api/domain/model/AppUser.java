@@ -32,10 +32,12 @@ public class AppUser extends AuditableEntity {
 
     // FK composta: (tenant_id, person_id) -> person(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "person_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(
+            name = "person_id",
+            referencedColumnName = "id",
+            insertable = false,
+            updatable = false
+    )
     private Person person;
 
     @Column(name = "email", nullable = false, length = 255)

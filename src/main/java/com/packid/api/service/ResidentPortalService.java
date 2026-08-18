@@ -29,6 +29,9 @@ public class ResidentPortalService {
     private final PackIdRepository packIdRepository;
     private final PersonRepository personRepository;
     private final RegistryEntryService registryEntryService;
+    private final VisitorVisitService visitorVisitService;
+    private final DeliveryRecordService deliveryRecordService;
+    private final ServiceRecordService serviceRecordService;
     private final SpaceAccessService spaceAccessService;
     private final TenantGoogleAccountService googleAccountService;
     private final GoogleDrivePhotoService googleDrivePhotoService;
@@ -40,6 +43,9 @@ public class ResidentPortalService {
             PackIdRepository packIdRepository,
             PersonRepository personRepository,
             RegistryEntryService registryEntryService,
+            VisitorVisitService visitorVisitService,
+            DeliveryRecordService deliveryRecordService,
+            ServiceRecordService serviceRecordService,
             SpaceAccessService spaceAccessService,
             TenantGoogleAccountService googleAccountService,
             GoogleDrivePhotoService googleDrivePhotoService,
@@ -50,6 +56,9 @@ public class ResidentPortalService {
         this.packIdRepository = packIdRepository;
         this.personRepository = personRepository;
         this.registryEntryService = registryEntryService;
+        this.visitorVisitService = visitorVisitService;
+        this.deliveryRecordService = deliveryRecordService;
+        this.serviceRecordService = serviceRecordService;
         this.spaceAccessService = spaceAccessService;
         this.googleAccountService = googleAccountService;
         this.googleDrivePhotoService = googleDrivePhotoService;
@@ -75,6 +84,9 @@ public class ResidentPortalService {
                 byType(entries, RegistryEntry.EntryType.BICYCLE, tenantId),
                 byType(entries, RegistryEntry.EntryType.VEHICLE, tenantId),
                 byType(entries, RegistryEntry.EntryType.PET, tenantId),
+                visitorVisitService.getByUnit(tenantId, occupancy.getBlock(), occupancy.getApartment(), finalFrom, finalTo),
+                deliveryRecordService.getByUnit(tenantId, occupancy.getBlock(), occupancy.getApartment(), finalFrom, finalTo),
+                serviceRecordService.getByUnit(tenantId, occupancy.getBlock(), occupancy.getApartment(), finalFrom, finalTo),
                 packIdRepository.findByUnit(
                                 tenantId,
                                 occupancy.getBlock(),

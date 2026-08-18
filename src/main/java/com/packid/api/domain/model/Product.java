@@ -41,9 +41,6 @@ public class Product extends AuditableEntity {
 
     // FK composta: (tenant_id, unit_of_measure_id) -> uom(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "unit_of_measure_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "unit_of_measure_id", referencedColumnName = "id", insertable = false, updatable = false)
     private UnitOfMeasure unitOfMeasure;
 }

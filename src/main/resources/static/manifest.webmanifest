@@ -1,0 +1,39 @@
+{
+  "id": "/condominio/user",
+  "name": "VSGI Condomínio - Portal do Morador",
+  "short_name": "VSGI",
+  "description": "Portal do morador para consulta da unidade, encomendas e solicitação de chaves das áreas de lazer.",
+  "lang": "pt-BR",
+  "start_url": "/condominio/user",
+  "scope": "/condominio/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f7f8",
+  "theme_color": "#263746",
+  "icons": [
+    {
+      "src": "/condominio/icons/vsgi-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/condominio/icons/vsgi-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/condominio/icons/vsgi-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/condominio/icons/vsgi-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

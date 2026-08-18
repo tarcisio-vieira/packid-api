@@ -72,19 +72,26 @@ public class DeliveryRecordService {
     public List<DeliveryRecordResponse> getByUnit(
             AppUser appUser, String block, String apartment, LocalDateTime from, LocalDateTime to
     ) {
+        return getByUnit(appUser.getTenantId(), block, apartment, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DeliveryRecordResponse> getByUnit(
+            UUID tenantId, String block, String apartment, LocalDateTime from, LocalDateTime to
+    ) {
         String cleanedBlock = required(block, "Bloco é obrigatório.");
         String cleanedApartment = required(apartment, "Apartamento é obrigatório.");
 
         List<DeliveryRecord> records;
         if (from != null && to != null) {
-            records = repository.findByUnitBetween(appUser.getTenantId(), cleanedBlock, cleanedApartment, from, to);
+            records = repository.findByUnitBetween(tenantId, cleanedBlock, cleanedApartment, from, to);
         } else if (from != null) {
-            records = repository.findByUnitFrom(appUser.getTenantId(), cleanedBlock, cleanedApartment, from);
+            records = repository.findByUnitFrom(tenantId, cleanedBlock, cleanedApartment, from);
         } else if (to != null) {
-            records = repository.findByUnitUntil(appUser.getTenantId(), cleanedBlock, cleanedApartment, to);
+            records = repository.findByUnitUntil(tenantId, cleanedBlock, cleanedApartment, to);
         } else {
             records = repository.findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByDeliveredAtDesc(
-                    appUser.getTenantId(), cleanedBlock, cleanedApartment);
+                    tenantId, cleanedBlock, cleanedApartment);
         }
 
         return records.stream()

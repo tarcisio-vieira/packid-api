@@ -31,10 +31,7 @@ public class ResidentialUnit extends AuditableEntity {
 
     // FK composta: (tenant_id, condominium_id) -> condominium(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "condominium_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "condominium_id", referencedColumnName = "id", insertable = false, updatable = false)
     private Condominium condominium;
 
     @Column(name = "code", nullable = false, length = 30)

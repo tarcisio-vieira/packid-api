@@ -29,10 +29,7 @@ public class PackId extends AuditableEntity {
 
     // FK composta: (tenant_id, residential_unit_id) -> residential_unit(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "residential_unit_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "residential_unit_id", referencedColumnName = "id", insertable = false, updatable = false)
     private ResidentialUnit residentialUnit;
 
     @Column(name = "person_id", nullable = false, columnDefinition = "uuid")
@@ -40,20 +37,14 @@ public class PackId extends AuditableEntity {
 
     // FK composta: (tenant_id, person_id) -> person(tenant_id, id)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "person_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "person_id", referencedColumnName = "id", insertable = false, updatable = false)
     private Person person;
 
     @Column(name = "registered_by_user_id", columnDefinition = "uuid")
     private UUID registeredByUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "registered_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "registered_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
     private AppUser registeredBy;
 
     @Enumerated(EnumType.STRING)
@@ -113,10 +104,7 @@ public class PackId extends AuditableEntity {
     private UUID handedOverByUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "handed_over_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "handed_over_by_user_id", referencedColumnName = "id", insertable = false, updatable = false)
     private AppUser handedOverBy;
 
     @Column(name = "observations", columnDefinition = "text")

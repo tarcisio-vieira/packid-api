@@ -75,11 +75,16 @@ public class ServiceRecordService {
 
     @Transactional(readOnly = true)
     public List<ServiceRecordResponse> getByUnit(AppUser appUser, String block, String apartment, LocalDateTime from, LocalDateTime to) {
+        return getByUnit(appUser.getTenantId(), block, apartment, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ServiceRecordResponse> getByUnit(UUID tenantId, String block, String apartment, LocalDateTime from, LocalDateTime to) {
         List<ServiceRecord> records;
-        if (from != null && to != null) records = repository.findByUnitBetween(appUser.getTenantId(), ServiceRecord.ServiceScope.UNIT, block, apartment, from, to);
-        else if (from != null) records = repository.findByUnitFrom(appUser.getTenantId(), ServiceRecord.ServiceScope.UNIT, block, apartment, from);
-        else if (to != null) records = repository.findByUnitUntil(appUser.getTenantId(), ServiceRecord.ServiceScope.UNIT, block, apartment, to);
-        else records = repository.findByUnit(appUser.getTenantId(), ServiceRecord.ServiceScope.UNIT, block, apartment);
+        if (from != null && to != null) records = repository.findByUnitBetween(tenantId, ServiceRecord.ServiceScope.UNIT, block, apartment, from, to);
+        else if (from != null) records = repository.findByUnitFrom(tenantId, ServiceRecord.ServiceScope.UNIT, block, apartment, from);
+        else if (to != null) records = repository.findByUnitUntil(tenantId, ServiceRecord.ServiceScope.UNIT, block, apartment, to);
+        else records = repository.findByUnit(tenantId, ServiceRecord.ServiceScope.UNIT, block, apartment);
         return records.stream().map(item -> toResponse(item, item.getServiceProvider(), item.getServiceCompany())).toList();
     }
 

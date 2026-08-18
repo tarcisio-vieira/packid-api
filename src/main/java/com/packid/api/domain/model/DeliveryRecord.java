@@ -21,10 +21,7 @@ public class DeliveryRecord extends AuditableEntity {
     private UUID deliveryPersonRegistryEntryId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "tenant_id", referencedColumnName = "tenant_id", insertable = false, updatable = false),
-            @JoinColumn(name = "delivery_person_registry_entry_id", referencedColumnName = "id", insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "delivery_person_registry_entry_id", referencedColumnName = "id", insertable = false, updatable = false)
     private RegistryEntry deliveryPerson;
 
     @Column(name = "block", nullable = false, length = 30)

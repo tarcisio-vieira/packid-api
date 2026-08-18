@@ -70,19 +70,26 @@ public class VisitorVisitService {
     public List<VisitorVisitResponse> getByUnit(
             AppUser appUser, String block, String apartment, LocalDateTime from, LocalDateTime to
     ) {
+        return getByUnit(appUser.getTenantId(), block, apartment, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VisitorVisitResponse> getByUnit(
+            UUID tenantId, String block, String apartment, LocalDateTime from, LocalDateTime to
+    ) {
         String cleanedBlock = required(block, "Bloco é obrigatório.");
         String cleanedApartment = required(apartment, "Apartamento é obrigatório.");
 
         List<VisitorVisit> visits;
         if (from != null && to != null) {
-            visits = repository.findByUnitBetween(appUser.getTenantId(), cleanedBlock, cleanedApartment, from, to);
+            visits = repository.findByUnitBetween(tenantId, cleanedBlock, cleanedApartment, from, to);
         } else if (from != null) {
-            visits = repository.findByUnitFrom(appUser.getTenantId(), cleanedBlock, cleanedApartment, from);
+            visits = repository.findByUnitFrom(tenantId, cleanedBlock, cleanedApartment, from);
         } else if (to != null) {
-            visits = repository.findByUnitUntil(appUser.getTenantId(), cleanedBlock, cleanedApartment, to);
+            visits = repository.findByUnitUntil(tenantId, cleanedBlock, cleanedApartment, to);
         } else {
             visits = repository.findAllByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalseOrderByVisitedAtDesc(
-                    appUser.getTenantId(), cleanedBlock, cleanedApartment);
+                    tenantId, cleanedBlock, cleanedApartment);
         }
 
         return visits.stream()
