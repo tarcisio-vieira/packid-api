@@ -112,6 +112,7 @@ public class RegistryEntryService {
             EntryType entryType,
             String search,
             boolean includeInactive,
+            boolean ownersOnly,
             int page,
             int size,
             String sortField,
@@ -125,7 +126,11 @@ public class RegistryEntryService {
 
         int safePage = Math.max(0, page);
         int safeSize = Math.max(5, Math.min(size, 100));
-        String safeSortField = "name".equalsIgnoreCase(sortField) ? "name" : "unit";
+        String safeSortField = switch (sortField == null ? "" : sortField.toLowerCase()) {
+            case "name" -> "name";
+            case "owner" -> "owner";
+            default -> "unit";
+        };
         String safeSortDirection = "desc".equalsIgnoreCase(sortDirection) ? "desc" : "asc";
         String normalizedSearch = normalizeSearch(search);
 
@@ -133,6 +138,7 @@ public class RegistryEntryService {
                 appUser.getTenantId(),
                 entryType.name(),
                 includeInactive,
+                ownersOnly && entryType == EntryType.RESIDENT,
                 normalizedSearch,
                 safeSortField,
                 safeSortDirection,

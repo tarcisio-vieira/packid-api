@@ -7,6 +7,7 @@ import com.packid.api.domain.model.AppUser;
 import com.packid.api.service.AccessControlService;
 import com.packid.api.service.AppUserService;
 import com.packid.api.service.AuthenticatedUserService;
+import com.packid.api.domain.repository.TenantRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,12 +27,14 @@ public class AppUserController {
     private final AppUserService service;
     private final AuthenticatedUserService authenticatedUserService;
     private final AccessControlService accessControlService;
+    private final TenantRepository tenantRepository;
 
     public AppUserController(AppUserService service, AuthenticatedUserService authenticatedUserService,
-                             AccessControlService accessControlService) {
+                             AccessControlService accessControlService, TenantRepository tenantRepository) {
         this.service = service;
         this.authenticatedUserService = authenticatedUserService;
         this.accessControlService = accessControlService;
+        this.tenantRepository = tenantRepository;
     }
 
     @GetMapping("/me")
@@ -44,6 +47,11 @@ public class AppUserController {
         response.put("name", displayName);
         response.put("email", appUser.getEmail());
         response.put("role", appUser.getRole());
+        String tenantName = tenantRepository.findByIdAndDeletedFalse(appUser.getTenantId())
+                .map(com.packid.api.domain.model.Tenant::getName)
+                .filter(name -> !name.isBlank())
+                .orElse("Condomínio");
+        response.put("tenantName", tenantName);
         response.put("canManageSettings", accessControlService.canManageSettings(appUser));
         response.put("canManageProtectedRegistry", accessControlService.canManageProtectedRegistry(appUser));
         response.put("canOperateCondominium", accessControlService.canOperateCondominium(appUser));

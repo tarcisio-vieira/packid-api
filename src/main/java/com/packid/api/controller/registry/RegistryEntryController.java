@@ -54,12 +54,13 @@ public class RegistryEntryController {
             @RequestParam EntryType type,
             @RequestParam(required = false, defaultValue = "") String search,
             @RequestParam(required = false, defaultValue = "false") boolean includeInactive,
+            @RequestParam(required = false, defaultValue = "false") boolean ownersOnly,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size,
             @RequestParam(required = false, defaultValue = "unit") String sort,
             @RequestParam(required = false, defaultValue = "asc") String direction
     ) {
-        return ResponseEntity.ok(service.getPage(user, type, search, includeInactive, page, size, sort, direction));
+        return ResponseEntity.ok(service.getPage(user, type, search, includeInactive, ownersOnly, page, size, sort, direction));
     }
 
     @GetMapping("/unit-vehicles")

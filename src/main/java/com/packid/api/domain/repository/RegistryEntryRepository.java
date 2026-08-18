@@ -34,6 +34,7 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
                AND re.entry_type = :entryType
                AND re.deleted = false
                AND (:includeInactive = true OR re.active = true)
+               AND (:ownersOnly = false OR re.unit_owner = true)
                AND (
                     :search = ''
                     OR translate(lower(concat_ws(' ',
@@ -62,6 +63,16 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
                     THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END ASC,
                CASE WHEN :sortField = 'name' AND :sortDirection = 'desc'
                     THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END DESC,
+
+               CASE WHEN :sortField = 'owner' AND :sortDirection = 'asc' THEN re.unit_owner END ASC,
+               CASE WHEN :sortField = 'owner' AND :sortDirection = 'desc' THEN re.unit_owner END DESC,
+               CASE WHEN :sortField = 'owner'
+                    THEN CASE WHEN coalesce(re.block, '') ~ '^[0-9]+$' THEN lpad(re.block, 20, '0') ELSE lower(coalesce(re.block, '')) END END ASC,
+               CASE WHEN :sortField = 'owner'
+                    THEN CASE WHEN coalesce(re.apartment, '') ~ '^[0-9]+$' THEN lpad(re.apartment, 20, '0') ELSE lower(coalesce(re.apartment, '')) END END ASC,
+               CASE WHEN :sortField = 'owner'
+                    THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END ASC,
+
                CASE WHEN :sortField = 'unit' AND :sortDirection = 'asc'
                     THEN CASE WHEN coalesce(re.block, '') ~ '^[0-9]+$' THEN lpad(re.block, 20, '0') ELSE lower(coalesce(re.block, '')) END END ASC,
                CASE WHEN :sortField = 'unit' AND :sortDirection = 'asc'
@@ -70,6 +81,7 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
                     THEN CASE WHEN coalesce(re.block, '') ~ '^[0-9]+$' THEN lpad(re.block, 20, '0') ELSE lower(coalesce(re.block, '')) END END DESC,
                CASE WHEN :sortField = 'unit' AND :sortDirection = 'desc'
                     THEN CASE WHEN coalesce(re.apartment, '') ~ '^[0-9]+$' THEN lpad(re.apartment, 20, '0') ELSE lower(coalesce(re.apartment, '')) END END DESC,
+               CASE WHEN :sortField = 'unit' AND re.entry_type = 'RESIDENT' THEN re.unit_owner END DESC,
                CASE WHEN :sortField = 'unit'
                     THEN translate(lower(coalesce(re.name, '')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') END ASC,
                re.id ASC
@@ -81,6 +93,7 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
                AND re.entry_type = :entryType
                AND re.deleted = false
                AND (:includeInactive = true OR re.active = true)
+               AND (:ownersOnly = false OR re.unit_owner = true)
                AND (:sortField = :sortField)
                AND (:sortDirection = :sortDirection)
                AND (
@@ -112,6 +125,7 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
             @Param("tenantId") UUID tenantId,
             @Param("entryType") String entryType,
             @Param("includeInactive") boolean includeInactive,
+            @Param("ownersOnly") boolean ownersOnly,
             @Param("search") String search,
             @Param("sortField") String sortField,
             @Param("sortDirection") String sortDirection,
