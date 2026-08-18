@@ -68,6 +68,13 @@ public class AccessControlService {
         }
     }
 
+    public void requireAdministrativeUser(AppUser user) {
+        if (!isAdmin(user) && !isSecretary(user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Somente administrador ou secretaria podem exportar os dados do condomínio.");
+        }
+    }
+
     public void requireMutationPermission(AppUser user, RegistryEntry.EntryType type) {
         if (isProtectedRegistryType(type)) {
             requireProtectedRegistryManager(user);

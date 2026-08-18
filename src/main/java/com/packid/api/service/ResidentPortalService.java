@@ -192,11 +192,20 @@ public class ResidentPortalService {
         return registryEntryService.toResidentResponse(saved, context.tenant().getId());
     }
 
-    public com.packid.api.controller.space.dto.SpaceAccessResponse toggleSpace(
+    public com.packid.api.controller.space.dto.SpaceKeyAvailabilityResponse spaceAvailability(
             jakarta.servlet.http.HttpSession session,
             com.packid.api.domain.model.SpaceAccessRequest.SpaceType spaceType
     ) {
-        return spaceAccessService.residentToggle(residentSessionService.requirePortalContext(session), spaceType);
+        return spaceAccessService.residentAvailability(residentSessionService.requirePortalContext(session), spaceType);
+    }
+
+    public com.packid.api.controller.space.dto.SpaceAccessResponse toggleSpace(
+            jakarta.servlet.http.HttpSession session,
+            com.packid.api.domain.model.SpaceAccessRequest.SpaceType spaceType,
+            boolean assumeResponsibility
+    ) {
+        return spaceAccessService.residentToggle(
+                residentSessionService.requirePortalContext(session), spaceType, assumeResponsibility);
     }
 
     public List<com.packid.api.controller.space.dto.SpaceAccessResponse> spaces(jakarta.servlet.http.HttpSession session) {

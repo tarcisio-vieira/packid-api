@@ -4,6 +4,7 @@ import com.packid.api.controller.resident.dto.ResidentPortalResponse;
 import com.packid.api.controller.resident.dto.ResidentProfileUpdateRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
+import com.packid.api.controller.space.dto.SpaceKeyAvailabilityResponse;
 import com.packid.api.domain.model.SpaceAccessRequest;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
 import com.packid.api.service.ResidentPortalService;
@@ -70,8 +71,20 @@ public class ResidentPortalController {
         return service.spaces(session);
     }
 
+    @GetMapping("/spaces/{spaceType}/availability")
+    public SpaceKeyAvailabilityResponse spaceAvailability(
+            HttpSession session,
+            @PathVariable SpaceAccessRequest.SpaceType spaceType
+    ) {
+        return service.spaceAvailability(session, spaceType);
+    }
+
     @PostMapping("/spaces/{spaceType}/request")
-    public SpaceAccessResponse toggleSpace(HttpSession session, @PathVariable SpaceAccessRequest.SpaceType spaceType) {
-        return service.toggleSpace(session, spaceType);
+    public SpaceAccessResponse toggleSpace(
+            HttpSession session,
+            @PathVariable SpaceAccessRequest.SpaceType spaceType,
+            @RequestParam(required = false, defaultValue = "false") boolean assumeResponsibility
+    ) {
+        return service.toggleSpace(session, spaceType, assumeResponsibility);
     }
 }
