@@ -13,6 +13,11 @@ server:
   forward-headers-strategy: framework
   tomcat:
     redirect-context-root: false
+    # O acesso HTTP não precisa ser registrado pelo Tomcat em produção.
+    # As consultas de polling (pending/pickup-requests) ocorrem a cada 5s e
+    # não devem poluir os logs da aplicação.
+    accesslog:
+      enabled: false
 
 spring:
   datasource:
@@ -30,8 +35,19 @@ spring:
 
 logging:
   level:
-    root: INFO
-    org.springframework.web: INFO
+    # Produção: registra apenas avisos/erros das bibliotecas/frameworks.
+    # Evita log repetitivo de requisições HTTP, inclusive os pollings de 5s.
+    root: WARN
+    org.springframework: WARN
+    org.springframework.web: WARN
+    org.springframework.security: WARN
+    org.hibernate: WARN
+    com.zaxxer.hikari: WARN
+    liquibase: WARN
+
+    # Mantém os logs funcionais do próprio sistema (envio de WhatsApp,
+    # integrações e situações relevantes) sem habilitar DEBUG/TRACE.
+    com.packid.api: INFO
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:8080}
