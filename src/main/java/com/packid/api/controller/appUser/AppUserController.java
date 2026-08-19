@@ -39,7 +39,7 @@ public class AppUserController {
 
     @GetMapping("/me")
     public Map<String, Object> me(@AuthenticationPrincipal OidcUser user) {
-        AppUser appUser = authenticatedUserService.requireAppUser(user);
+        AppUser appUser = authenticatedUserService.requireAppUserAndTouchLogin(user);
         String displayName = user.getFullName();
         if (displayName == null || displayName.isBlank()) displayName = appUser.getFullName();
         if (displayName == null || displayName.isBlank()) displayName = appUser.getEmail();

@@ -1,6 +1,8 @@
 package com.packid.api.controller.pool;
 
+import com.packid.api.controller.pool.dto.PoolCardPageResponse;
 import com.packid.api.controller.pool.dto.PoolCardRequest;
+import com.packid.api.controller.pool.dto.PoolCardResidentOptionResponse;
 import com.packid.api.controller.pool.dto.PoolCardResponse;
 import com.packid.api.controller.pool.dto.PoolCardSettingsResponse;
 import com.packid.api.domain.model.PoolCard;
@@ -40,9 +42,24 @@ public class PoolCardController {
     }
 
     @GetMapping
-    public List<PoolCardResponse> list(@AuthenticationPrincipal OidcUser user,
-                                       @RequestParam(required = false) String search) {
-        return service.list(user, search);
+    public List<PoolCardResponse> listLegacy(@AuthenticationPrincipal OidcUser user,
+                                             @RequestParam(required = false, defaultValue = "") String search) {
+        return service.listLegacy(user, search);
+    }
+
+    @GetMapping("/page")
+    public PoolCardPageResponse list(@AuthenticationPrincipal OidcUser user,
+                                     @RequestParam(required = false, defaultValue = "") String search,
+                                     @RequestParam(required = false, defaultValue = "0") int page,
+                                     @RequestParam(required = false, defaultValue = "10") int size) {
+        return service.list(user, search, page, size);
+    }
+
+    @GetMapping("/residents")
+    public List<PoolCardResidentOptionResponse> residents(@AuthenticationPrincipal OidcUser user,
+                                                           @RequestParam(required = false, defaultValue = "") String search,
+                                                           @RequestParam(required = false, defaultValue = "20") int limit) {
+        return service.residentOptions(user, search, limit);
     }
 
     @GetMapping("/settings")

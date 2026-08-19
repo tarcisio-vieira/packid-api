@@ -1,6 +1,8 @@
 package com.packid.api.service;
 
+import com.packid.api.controller.pool.dto.PoolCardPageResponse;
 import com.packid.api.controller.pool.dto.PoolCardRequest;
+import com.packid.api.controller.pool.dto.PoolCardResidentOptionResponse;
 import com.packid.api.controller.pool.dto.PoolCardResponse;
 import com.packid.api.controller.pool.dto.PoolCardSettingsResponse;
 import com.packid.api.domain.model.AppUser;
@@ -10,6 +12,8 @@ import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.repository.PoolCardRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
@@ -40,13 +44,68 @@ public class PoolCardService {
         this.brandingService = brandingService;
     }
 
+    /** Mantém compatibilidade com versões anteriores do frontend durante atualização/cache. */
     @Transactional
-    public List<PoolCardResponse> list(OidcUser oidcUser, String search) {
+    public List<PoolCardResponse> listLegacy(OidcUser oidcUser, String search) {
         AppUser user = viewer(oidcUser);
         String q = clean(search);
-        return repository.findAllByTenantIdAndDeletedFalseOrderByValidUntilDesc(user.getTenantId()).stream()
-                .filter(card -> q == null || matches(card, q))
-                .map(this::toResponse)
+        String normalizedSearch = q == null ? "" : q.toLowerCase();
+        return repository.searchAll(user.getTenantId(), normalizedSearch).stream()
+                .map(card -> toResponse(card, card.getResident()))
+                .toList();
+    }
+
+    /**
+     * Lista paginada no banco. A associação resident é carregada no mesmo SELECT
+     * para evitar uma consulta adicional para cada carteirinha (N+1).
+     */
+    @Transactional
+    public PoolCardPageResponse list(OidcUser oidcUser, String search, int page, int size) {
+        AppUser user = viewer(oidcUser);
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(5, Math.min(size, 50));
+        String q = clean(search);
+        String normalizedSearch = q == null ? "" : q.toLowerCase();
+
+        Page<PoolCard> result = repository.searchPage(
+                user.getTenantId(),
+                normalizedSearch,
+                PageRequest.of(safePage, safeSize)
+        );
+
+        List<PoolCardResponse> content = result.getContent().stream()
+                .map(card -> toResponse(card, card.getResident()))
+                .toList();
+
+        return new PoolCardPageResponse(
+                content,
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.getNumber(),
+                result.getSize()
+        );
+    }
+
+    /**
+     * Busca leve usada apenas no select pesquisável do cadastro/edição.
+     * Não utiliza RegistryEntryResponse, evitando consultas de ocupação e
+     * carteirinha para cada condômino exibido no autocomplete.
+     */
+    @Transactional
+    public List<PoolCardResidentOptionResponse> residentOptions(OidcUser oidcUser, String search, int limit) {
+        AppUser user = manager(oidcUser);
+        int safeLimit = Math.max(5, Math.min(limit, 30));
+        String q = clean(search);
+        String normalizedSearch = q == null ? "" : q.toLowerCase();
+
+        return registryEntryRepository.searchActiveResidentOptions(
+                        user.getTenantId(),
+                        RegistryEntry.EntryType.RESIDENT,
+                        normalizedSearch,
+                        PageRequest.of(0, safeLimit)
+                ).stream()
+                .map(entry -> new PoolCardResidentOptionResponse(
+                        entry.getId(), entry.getName(), entry.getBlock(), entry.getApartment()))
                 .toList();
     }
 
@@ -76,7 +135,7 @@ public class PoolCardService {
         card.setValidUntil(request.issueDate().plusMonths(months));
         card.setUnderTen(Boolean.TRUE.equals(request.underTen()));
         card.setCreatedBy(actor(user));
-        return toResponse(repository.save(card));
+        return toResponse(repository.save(card), resident);
     }
 
     @Transactional
@@ -93,7 +152,7 @@ public class PoolCardService {
         card.setValidUntil(request.issueDate().plusMonths(months));
         card.setUnderTen(Boolean.TRUE.equals(request.underTen()));
         card.setUpdatedBy(actor(user));
-        return toResponse(repository.save(card));
+        return toResponse(repository.save(card), resident);
     }
 
     @Transactional
@@ -154,19 +213,14 @@ public class PoolCardService {
         return entry;
     }
 
-    private boolean matches(PoolCard card, String query) {
-        RegistryEntry r = card.getResident();
-        String haystack = String.join(" ",
-                r == null ? "" : defaultText(r.getName(), ""),
-                r == null ? "" : defaultText(r.getBlock(), ""),
-                r == null ? "" : defaultText(r.getApartment(), ""));
-        return haystack.toLowerCase().contains(query.toLowerCase());
-    }
-
     public PoolCardResponse toResponse(PoolCard card) {
         RegistryEntry resident = registryEntryRepository
                 .findByTenantIdAndIdAndDeletedFalse(card.getTenantId(), card.getResidentRegistryEntryId())
                 .orElse(null);
+        return toResponse(card, resident);
+    }
+
+    private PoolCardResponse toResponse(PoolCard card, RegistryEntry resident) {
         boolean valid = card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
         return new PoolCardResponse(
                 card.getId(), card.getResidentRegistryEntryId(),

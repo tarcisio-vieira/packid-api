@@ -108,13 +108,15 @@ BEGIN
   END IF;
 
   -- ----------------------------
-  -- RESIDENTIAL UNITS (Bloco 2)
-  -- 12 andares, 8 aptos por andar:
-  -- 2101..2108, 2201..2208, ..., 21201..21208
+  -- RESIDENTIAL UNITS - Recanto Tropical
+  -- Bloco 1: 12 andares x 4 apartamentos = 48 unidades
+  -- Blocos 2, 3 e 4: 12 andares x 8 apartamentos = 96 unidades por bloco
+  -- Total: 336 unidades
+  -- Código interno = bloco + apartamento. Ex.: 2608 e 21208.
   -- ----------------------------
   INSERT INTO residential_unit (
     id, tenant_id, condominium_id,
-    code, name,
+    code, name, block, apartment,
     active,
     created_by, deleted
   )
@@ -122,14 +124,24 @@ BEGIN
     gen_random_uuid(),
     v_tenant_id,
     v_condo_id,
-    ('2' || f::text || lpad(a::text, 2, '0')) AS code,
-    ('Bloco 2 - Andar ' || f::text || ' - Apto ' || lpad(a::text, 2, '0')) AS name,
+    (b::text || f::text || lpad(a::text, 2, '0')) AS code,
+    ('Bloco ' || b::text || ' - Andar ' || f::text || ' - Apto ' || lpad(a::text, 2, '0')) AS name,
+    b::text AS block,
+    (f::text || lpad(a::text, 2, '0')) AS apartment,
     true,
     v_created_by,
     false
-  FROM generate_series(1, 12) AS f
-  CROSS JOIN generate_series(1, 8) AS a
-  ON CONFLICT (tenant_id, condominium_id, code) DO NOTHING;
+  FROM generate_series(1, 4) AS b
+  CROSS JOIN generate_series(1, 12) AS f
+  CROSS JOIN LATERAL generate_series(1, CASE WHEN b = 1 THEN 4 ELSE 8 END) AS a
+  ON CONFLICT (tenant_id, condominium_id, code) DO UPDATE
+    SET name = EXCLUDED.name,
+        block = EXCLUDED.block,
+        apartment = EXCLUDED.apartment,
+        active = true,
+        deleted = false,
+        deleted_at = NULL,
+        deleted_by = NULL;
 
   RAISE NOTICE 'Tenant: %', v_tenant_id;
   RAISE NOTICE 'Condominium: %', v_condo_id;
@@ -154,17 +166,17 @@ SELECT id, tenant_id, email, provider, provider_subject, role, enabled
 FROM app_user
 WHERE email = 'tarcisio.vieira.dom@gmail.com';
 
--- Deve dar 96 unidades (12 * 8)
-SELECT COUNT(*) AS total_unidades_bloco2
+-- Deve dar 336 unidades (48 do bloco 1 + 96 dos blocos 2, 3 e 4)
+SELECT COUNT(*) AS total_unidades_recanto
 FROM residential_unit ru
 JOIN condominium c ON c.id = ru.condominium_id
-WHERE ru.code LIKE '2%'
-  AND c.name = 'Condomínio Recanto Tropical';
+WHERE c.name = 'Condomínio Recanto Tropical'
+  AND ru.deleted = false;
 
 -- Exemplos: primeiro e último
 SELECT code, name
 FROM residential_unit
-WHERE code IN ('2101','2108','21201','21208')
+WHERE code IN ('1101','11204','2101','21208','3101','31208','4101','41208')
 ORDER BY code;
 
 

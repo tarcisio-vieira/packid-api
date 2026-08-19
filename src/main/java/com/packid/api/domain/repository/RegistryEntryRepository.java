@@ -26,6 +26,33 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
     List<RegistryEntry> findAllByTenantIdAndDeletedFalseOrderByNameAsc(UUID tenantId);
     List<RegistryEntry> findAllByTenantIdAndEntryTypeAndDeletedFalseOrderByNameAsc(UUID tenantId, EntryType entryType);
 
+    @Query("""
+            select re
+              from RegistryEntry re
+             where re.tenantId = :tenantId
+               and re.entryType = :entryType
+               and re.active = true
+               and re.deleted = false
+               and re.block is not null
+               and re.apartment is not null
+               and (
+                    :search = ''
+                    or lower(coalesce(re.name, '')) like concat('%', :search, '%')
+                    or lower(coalesce(re.block, '')) like concat('%', :search, '%')
+                    or lower(coalesce(re.apartment, '')) like concat('%', :search, '%')
+                    or lower(concat(coalesce(re.block, ''), coalesce(re.apartment, ''))) like concat('%', :search, '%')
+               )
+             order by lower(coalesce(re.block, '')) asc,
+                      lower(coalesce(re.apartment, '')) asc,
+                      lower(coalesce(re.name, '')) asc
+            """)
+    List<RegistryEntry> searchActiveResidentOptions(
+            @Param("tenantId") UUID tenantId,
+            @Param("entryType") EntryType entryType,
+            @Param("search") String search,
+            Pageable pageable
+    );
+
 
     @Query(value = """
             SELECT re.*

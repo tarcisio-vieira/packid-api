@@ -1,0 +1,123 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0029-recanto-residential-units
+      author: packid
+      comment: >
+        Normaliza as unidades do Condomínio Recanto Tropical para a estrutura real:
+        bloco 1 com 12 andares e 4 apartamentos por andar; blocos 2, 3 e 4
+        com 12 andares e 8 apartamentos por andar. Mantém unidades inválidas
+        apenas como soft delete para preservar referências históricas.
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              -- Localiza somente o condomínio Recanto Tropical.
+              -- O CNPJ é o identificador preferencial; o nome é fallback para bases
+              -- onde document_number ainda não esteja preenchido.
+              WITH target_condo AS (
+                  SELECT c.id AS condominium_id, c.tenant_id
+                    FROM public.condominium c
+                   WHERE c.deleted = false
+                     AND (
+                          regexp_replace(COALESCE(c.document_number, ''), '[^0-9]', '', 'g') = '26296992000130'
+                          OR LOWER(TRIM(c.name)) LIKE '%recanto tropical%'
+                     )
+              ),
+              expected_units AS (
+                  SELECT
+                      tc.tenant_id,
+                      tc.condominium_id,
+                      b::text AS block,
+                      f AS floor,
+                      a AS apartment_position,
+                      f::text || LPAD(a::text, 2, '0') AS apartment,
+                      b::text || f::text || LPAD(a::text, 2, '0') AS code,
+                      'Bloco ' || b::text || ' - Andar ' || f::text || ' - Apto ' || LPAD(a::text, 2, '0') AS name
+                    FROM target_condo tc
+                    CROSS JOIN generate_series(1, 4) AS b
+                    CROSS JOIN generate_series(1, 12) AS f
+                    CROSS JOIN LATERAL generate_series(1, CASE WHEN b = 1 THEN 4 ELSE 8 END) AS a
+              )
+              INSERT INTO public.residential_unit (
+                  id, tenant_id, condominium_id, code, name, block, apartment, active,
+                  created_at, created_by, deleted
+              )
+              SELECT
+                  gen_random_uuid(), eu.tenant_id, eu.condominium_id, eu.code, eu.name, eu.block, eu.apartment, true,
+                  CURRENT_TIMESTAMP, 'liquibase-0029', false
+                FROM expected_units eu
+              ON CONFLICT (tenant_id, condominium_id, code)
+              DO UPDATE SET
+                  name = EXCLUDED.name,
+                  block = EXCLUDED.block,
+                  apartment = EXCLUDED.apartment,
+                  active = true,
+                  deleted = false,
+                  deleted_at = NULL,
+                  deleted_by = NULL,
+                  updated_at = CURRENT_TIMESTAMP,
+                  updated_by = 'liquibase-0029';
+
+              -- Quando um PackID já possui bloco/apartamento válidos, aponta o histórico
+              -- para a unidade canônica correspondente antes de ocultar unidades inválidas.
+              WITH target_condo AS (
+                  SELECT c.id AS condominium_id, c.tenant_id
+                    FROM public.condominium c
+                   WHERE c.deleted = false
+                     AND (
+                          regexp_replace(COALESCE(c.document_number, ''), '[^0-9]', '', 'g') = '26296992000130'
+                          OR LOWER(TRIM(c.name)) LIKE '%recanto tropical%'
+                     )
+              )
+              UPDATE public.pack_id p
+                 SET residential_unit_id = ru.id,
+                     updated_at = CURRENT_TIMESTAMP,
+                     updated_by = 'liquibase-0029'
+                FROM target_condo tc
+                JOIN public.residential_unit ru
+                  ON ru.tenant_id = tc.tenant_id
+                 AND ru.condominium_id = tc.condominium_id
+                 AND ru.deleted = false
+               WHERE p.tenant_id = tc.tenant_id
+                 AND ru.code = TRIM(COALESCE(p.building_block, '')) || TRIM(COALESCE(p.apartment, ''))
+                 AND p.residential_unit_id IS DISTINCT FROM ru.id;
+
+              -- Preserva as linhas antigas por integridade/histórico, mas remove da operação
+              -- todas as unidades que não pertencem às 336 possibilidades reais.
+              WITH target_condo AS (
+                  SELECT c.id AS condominium_id, c.tenant_id
+                    FROM public.condominium c
+                   WHERE c.deleted = false
+                     AND (
+                          regexp_replace(COALESCE(c.document_number, ''), '[^0-9]', '', 'g') = '26296992000130'
+                          OR LOWER(TRIM(c.name)) LIKE '%recanto tropical%'
+                     )
+              ),
+              expected_codes AS (
+                  SELECT
+                      tc.tenant_id,
+                      tc.condominium_id,
+                      b::text || f::text || LPAD(a::text, 2, '0') AS code
+                    FROM target_condo tc
+                    CROSS JOIN generate_series(1, 4) AS b
+                    CROSS JOIN generate_series(1, 12) AS f
+                    CROSS JOIN LATERAL generate_series(1, CASE WHEN b = 1 THEN 4 ELSE 8 END) AS a
+              )
+              UPDATE public.residential_unit ru
+                 SET active = false,
+                     deleted = true,
+                     deleted_at = COALESCE(ru.deleted_at, CURRENT_TIMESTAMP),
+                     deleted_by = COALESCE(ru.deleted_by, 'liquibase-0029'),
+                     updated_at = CURRENT_TIMESTAMP,
+                     updated_by = 'liquibase-0029'
+                FROM target_condo tc
+               WHERE ru.tenant_id = tc.tenant_id
+                 AND ru.condominium_id = tc.condominium_id
+                 AND ru.deleted = false
+                 AND NOT EXISTS (
+                     SELECT 1
+                       FROM expected_codes ec
+                      WHERE ec.tenant_id = ru.tenant_id
+                        AND ec.condominium_id = ru.condominium_id
+                        AND ec.code = ru.code
+                 );

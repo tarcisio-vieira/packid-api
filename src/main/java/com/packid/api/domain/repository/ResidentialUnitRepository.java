@@ -30,4 +30,5 @@ public interface ResidentialUnitRepository extends JpaRepository<ResidentialUnit
     List<ResidentialUnit> findAllByTenantIdAndCodeAndDeletedFalse(UUID tenantId, String code);
 
     Optional<ResidentialUnit> findByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalse(UUID tenantId, String block, String apartment);
+    Optional<ResidentialUnit> findByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalse(UUID tenantId, String block, String apartment);
 }

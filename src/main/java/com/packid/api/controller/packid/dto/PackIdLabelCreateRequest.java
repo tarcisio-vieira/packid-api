@@ -9,7 +9,7 @@ public record PackIdLabelCreateRequest(
         @Pattern(regexp = "(?:[1-9][0-9]{2}|1[0-2][0-9]{2})", message = "Apartamento inválido. Informe um apartamento entre o 1º e o 12º andar.")
         String apartment,
         @NotBlank
-        @Pattern(regexp = "[1-4]", message = "Bloco inválido. Informe um bloco de 1 a 4.")
+        @Pattern(regexp = "[1-9]", message = "Bloco inválido. Informe um único dígito de 1 a 9.")
         String block,
         @NotBlank
         @Pattern(regexp = "(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})", message = "Página inválida. Informe uma página entre 001 e 999.")

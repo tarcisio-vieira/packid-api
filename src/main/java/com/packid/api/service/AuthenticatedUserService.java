@@ -32,7 +32,7 @@ public class AuthenticatedUserService {
                     .findAllByProviderAndProviderSubjectAndDeletedFalse(AppUser.AuthProvider.GOOGLE, subject);
 
             if (bySubject.size() == 1) {
-                return touchLogin(validateEnabled(bySubject.get(0)));
+                return validateEnabled(bySubject.get(0));
             }
             if (bySubject.size() > 1) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -51,8 +51,11 @@ public class AuthenticatedUserService {
                     appUser.setProvider(AppUser.AuthProvider.GOOGLE);
                     appUser.setProviderSubject(subject);
                     appUser.setUpdatedBy(email);
+                    // Persistir apenas o vínculo inicial com a conta Google.
+                    // Consultas normais não devem gerar UPDATE em app_user.
+                    appUser = appUserRepository.save(appUser);
                 }
-                return touchLogin(appUser);
+                return appUser;
             }
             if (byEmail.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -64,6 +67,16 @@ public class AuthenticatedUserService {
 
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
                 "Não foi possível identificar o usuário autenticado.");
+    }
+
+    /**
+     * Resolve o usuário autenticado e registra o instante de login/acesso inicial.
+     * Deve ser usado apenas no endpoint de sessão (/api/app-users/me),
+     * nunca em endpoints de polling/consulta periódica.
+     */
+    @Transactional
+    public AppUser requireAppUserAndTouchLogin(OidcUser oidcUser) {
+        return touchLogin(requireAppUser(oidcUser));
     }
 
     private AppUser touchLogin(AppUser user) {

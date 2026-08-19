@@ -195,7 +195,7 @@ public class PackIdService {
 
         validateLabelUnit(bookPage, block, apartment);
 
-        ResidentialUnit unit = resolveOrCreateResidentialUnit(tenantId, block, apartment);
+        ResidentialUnit unit = resolveResidentialUnit(tenantId, block, apartment);
         Person resident = resolveResidentForUnit(tenantId, block, apartment);
 
         PackId p = new PackId();
@@ -438,14 +438,17 @@ public class PackIdService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Página inválida. Informe de 001 até 999.");
         }
 
-        if (!block.matches("[1-4]")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bloco inválido. Informe um bloco de 1 a 4.");
+        if (!block.matches("[1-9]")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Bloco inválido. Informe um único dígito de 1 a 9."
+            );
         }
 
         if (!apartment.matches("(?:[1-9][0-9]{2}|1[0-2][0-9]{2})")) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Apartamento inválido. O número deve representar um apartamento do 1º ao 12º andar."
+                    "Apartamento inválido. Informe um apartamento do 1º ao 12º andar."
             );
         }
     }
@@ -474,28 +477,21 @@ public class PackIdService {
 
     private static final String SYMBOLIC_RESIDENT_NAME = "***";
 
-    private ResidentialUnit resolveOrCreateResidentialUnit(UUID tenantId, String block, String apartment) {
+    private ResidentialUnit resolveResidentialUnit(UUID tenantId, String block, String apartment) {
         return residentialUnitRepository
-                .findByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalse(tenantId, block, apartment)
-                .orElseGet(() -> {
-                    String unitCode = block + apartment;
-                    List<ResidentialUnit> legacy = residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, unitCode);
-                    if (legacy.size() == 1) {
-                        ResidentialUnit unit = legacy.get(0);
-                        unit.setBlock(block);
-                        unit.setApartment(apartment);
-                        if (unit.getName() == null || unit.getName().isBlank() || "Unidade criada automaticamente".equals(unit.getName())) {
-                            unit.setName("Bloco " + block + " Apto " + apartment);
-                        }
-                        return residentialUnitRepository.save(unit);
-                    }
-                    if (legacy.size() > 1) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                "Existe mais de uma unidade com o código '" + unitCode + "'. Ajuste o cadastro de unidades.");
-                    }
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Bloco " + block + " / Apto " + apartment + " não está cadastrado. Cadastre a unidade nas Configurações antes de registrar a encomenda.");
-                });
+                .findByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndActiveTrueAndDeletedFalse(
+                        tenantId,
+                        block,
+                        apartment
+                )
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Unidade não encontrada. Não foi encontrado o Bloco "
+                                + block
+                                + " / Apartamento "
+                                + apartment
+                                + ". Confira o número informado."
+                ));
     }
 
     private Condominium resolveDefaultCondominium(UUID tenantId) {

@@ -56,5 +56,9 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/master/db.changelog-0027-resident-unit-access.yaml
+
   - include:
       file: db/changelog/master/db.changelog-0028-units-pool-branding.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0029-recanto-residential-units.yaml
