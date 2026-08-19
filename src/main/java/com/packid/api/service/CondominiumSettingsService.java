@@ -82,6 +82,19 @@ public class CondominiumSettingsService {
         condominium.setEmailNotificationsEnabled(!Boolean.FALSE.equals(request.emailNotificationsEnabled()));
         condominium.setResidentCredentialEmailsEnabled(Boolean.TRUE.equals(request.residentCredentialEmailsEnabled()));
         condominium.setPackIdPrintTwoLabels(!Boolean.FALSE.equals(request.packIdPrintTwoLabels()));
+        condominium.setPoolCardTitle(defaultText(request.poolCardTitle(), "PISCINA"));
+        condominium.setPoolCardSubtitle(defaultText(request.poolCardSubtitle(), "USO DA PISCINA"));
+        condominium.setPoolOpeningHours(clean(request.poolOpeningHours()));
+        condominium.setPoolShowOpeningHours(!Boolean.FALSE.equals(request.poolShowOpeningHours()));
+        condominium.setPoolClosedDaysMessage(clean(request.poolClosedDaysMessage()));
+        condominium.setPoolShowClosedDays(!Boolean.FALSE.equals(request.poolShowClosedDays()));
+        condominium.setPoolValidityMonths(request.poolValidityMonths() == null ? 6 : request.poolValidityMonths());
+        condominium.setPoolValidityMessage(clean(request.poolValidityMessage()));
+        condominium.setPoolShowValidityMessage(!Boolean.FALSE.equals(request.poolShowValidityMessage()));
+        condominium.setPoolGeneralInfo(clean(request.poolGeneralInfo()));
+        condominium.setPoolShowGeneralInfo(!Boolean.FALSE.equals(request.poolShowGeneralInfo()));
+        condominium.setPoolAdditionalInfo(clean(request.poolAdditionalInfo()));
+        condominium.setPoolCardColor(defaultText(request.poolCardColor(), "#0B5C2B"));
         condominiumRepository.save(condominium);
 
         return responseFor(appUser);
@@ -148,6 +161,21 @@ public class CondominiumSettingsService {
                 c == null || !Boolean.FALSE.equals(c.getEmailNotificationsEnabled()),
                 c != null && Boolean.TRUE.equals(c.getResidentCredentialEmailsEnabled()),
                 c == null || !Boolean.FALSE.equals(c.getPackIdPrintTwoLabels()),
+                c != null && clean(c.getLogoDriveFileId()) != null,
+                c == null ? null : c.getLogoFileName(),
+                c == null ? "PISCINA" : defaultText(c.getPoolCardTitle(), "PISCINA"),
+                c == null ? "USO DA PISCINA" : defaultText(c.getPoolCardSubtitle(), "USO DA PISCINA"),
+                c == null ? "Todos os dias das 09h às 17h." : c.getPoolOpeningHours(),
+                c == null || !Boolean.FALSE.equals(c.getPoolShowOpeningHours()),
+                c == null ? "Toda segunda-feira fechada para tratamento e manutenção de fundo." : c.getPoolClosedDaysMessage(),
+                c == null || !Boolean.FALSE.equals(c.getPoolShowClosedDays()),
+                c == null || c.getPoolValidityMonths() == null ? 6 : c.getPoolValidityMonths(),
+                c == null ? "A carteirinha terá validade de 06 meses, com necessária apresentação do exame médico atualizado para validação." : c.getPoolValidityMessage(),
+                c == null || !Boolean.FALSE.equals(c.getPoolShowValidityMessage()),
+                c == null ? "Regras da Piscina são regidas pelo Regulamento Interno e Decreto 4.447/81." : c.getPoolGeneralInfo(),
+                c == null || !Boolean.FALSE.equals(c.getPoolShowGeneralInfo()),
+                c == null ? "Administração" : c.getPoolAdditionalInfo(),
+                c == null ? "#0B5C2B" : defaultText(c.getPoolCardColor(), "#0B5C2B"),
                 google
         );
     }
@@ -155,6 +183,11 @@ public class CondominiumSettingsService {
     private String actor(AppUser appUser) {
         String email = clean(appUser.getEmail());
         return email == null ? "system" : email;
+    }
+
+    private String defaultText(String value, String fallback) {
+        String cleaned = clean(value);
+        return cleaned == null ? fallback : cleaned;
     }
 
     private String clean(String value) {

@@ -67,6 +67,10 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
 
         Instant getArrivedAt();
 
+        Instant getResidentAcknowledgedAt();
+
+        Instant getHandedOverAt();
+
         String getCreatedBy();
     }
 
@@ -92,6 +96,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
               p.label_package_code AS labelPackageCode,
               p.observations AS observations,
               p.arrived_at AS arrivedAt,
+              p.resident_acknowledged_at AS residentAcknowledgedAt,
+              p.handed_over_at AS handedOverAt,
               p.created_by AS createdBy
             FROM public.pack_id p
             JOIN public.residential_unit ru
@@ -135,6 +141,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
               p.label_package_code AS labelPackageCode,
               p.observations AS observations,
               p.arrived_at AS arrivedAt,
+              p.resident_acknowledged_at AS residentAcknowledgedAt,
+              p.handed_over_at AS handedOverAt,
               p.created_by AS createdBy
             FROM public.pack_id p
             JOIN public.residential_unit ru
@@ -185,5 +193,30 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
             @Param("toTs") java.sql.Timestamp toTs,
             @Param("limit") int limit
     );
+
+    @Query(value = """
+            SELECT
+              p.id AS id,
+              COALESCE(p.book_page, CASE WHEN p.building_block ~ '^[0-9]{3}$' THEN p.building_block ELSE NULL END) AS bookPage,
+              COALESCE(p.building_block, ru.block) AS block,
+              COALESCE(p.apartment, ru.apartment, ru.code) AS apartment,
+              pe.full_name AS residentFullName,
+              p.package_code AS packageCode,
+              p.label_package_code AS labelPackageCode,
+              p.observations AS observations,
+              p.arrived_at AS arrivedAt,
+              p.resident_acknowledged_at AS residentAcknowledgedAt,
+              p.handed_over_at AS handedOverAt,
+              p.created_by AS createdBy
+            FROM public.pack_id p
+            JOIN public.residential_unit ru ON ru.tenant_id = p.tenant_id AND ru.id = p.residential_unit_id
+            LEFT JOIN public.person pe ON pe.tenant_id = p.tenant_id AND pe.id = p.person_id
+            WHERE p.tenant_id = :tenantId
+              AND p.deleted = false
+              AND p.resident_acknowledged_at IS NOT NULL
+              AND p.handed_over_at IS NULL
+            ORDER BY p.resident_acknowledged_at ASC
+            """, nativeQuery = true)
+    List<PackIdRecentRow> findPendingPickupRequests(@Param("tenantId") UUID tenantId);
 
 }

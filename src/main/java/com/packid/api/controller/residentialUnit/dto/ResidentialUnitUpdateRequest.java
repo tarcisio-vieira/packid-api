@@ -6,5 +6,7 @@ public record ResidentialUnitUpdateRequest(
         UUID condominiumId,
         String code,
         String name,
+        String block,
+        String apartment,
         Boolean active
 ) {}

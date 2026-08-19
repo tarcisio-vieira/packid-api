@@ -72,6 +72,57 @@ public class Condominium extends AuditableEntity {
     @Column(name = "packid_print_two_labels", nullable = false)
     private Boolean packIdPrintTwoLabels = Boolean.TRUE;
 
+    @Column(name = "logo_drive_file_id", length = 255)
+    private String logoDriveFileId;
+
+    @Column(name = "logo_mime_type", length = 100)
+    private String logoMimeType;
+
+    @Column(name = "logo_file_name", length = 255)
+    private String logoFileName;
+
+    @Column(name = "logo_owner_email", length = 255)
+    private String logoOwnerEmail;
+
+    @Column(name = "pool_card_title", nullable = false, length = 80)
+    private String poolCardTitle = "PISCINA";
+
+    @Column(name = "pool_card_subtitle", nullable = false, length = 120)
+    private String poolCardSubtitle = "USO DA PISCINA";
+
+    @Column(name = "pool_opening_hours", length = 300)
+    private String poolOpeningHours = "Todos os dias das 09h às 17h.";
+
+    @Column(name = "pool_show_opening_hours", nullable = false)
+    private Boolean poolShowOpeningHours = Boolean.TRUE;
+
+    @Column(name = "pool_closed_days_message", length = 400)
+    private String poolClosedDaysMessage = "Toda segunda-feira fechada para tratamento e manutenção de fundo.";
+
+    @Column(name = "pool_show_closed_days", nullable = false)
+    private Boolean poolShowClosedDays = Boolean.TRUE;
+
+    @Column(name = "pool_validity_months", nullable = false)
+    private Integer poolValidityMonths = 6;
+
+    @Column(name = "pool_validity_message", length = 500)
+    private String poolValidityMessage = "A carteirinha terá validade de 06 meses, com necessária apresentação do exame médico atualizado para validação.";
+
+    @Column(name = "pool_show_validity_message", nullable = false)
+    private Boolean poolShowValidityMessage = Boolean.TRUE;
+
+    @Column(name = "pool_general_info", length = 500)
+    private String poolGeneralInfo = "Regras da Piscina são regidas pelo Regulamento Interno e Decreto 4.447/81.";
+
+    @Column(name = "pool_show_general_info", nullable = false)
+    private Boolean poolShowGeneralInfo = Boolean.TRUE;
+
+    @Column(name = "pool_additional_info", length = 160)
+    private String poolAdditionalInfo = "Administração";
+
+    @Column(name = "pool_card_color", nullable = false, length = 20)
+    private String poolCardColor = "#0B5C2B";
+
     @PrePersist
     void syncTenant() {
         if (tenantId == null && tenant != null) {

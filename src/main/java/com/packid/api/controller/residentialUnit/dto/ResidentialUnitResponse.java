@@ -9,6 +9,8 @@ public record ResidentialUnitResponse(
         UUID condominiumId,
         String code,
         String name,
+        String block,
+        String apartment,
         Boolean active,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

@@ -5,15 +5,24 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
 
+import java.util.TimeZone;
+
 @SpringBootApplication
 public class PackIdApiApplication extends SpringBootServletInitializer {
+    private static final String BRAZIL_TIME_ZONE = "America/Sao_Paulo";
 
-	public static void main(String[] args) {
-		SpringApplication.run(PackIdApiApplication.class, args);
-	}
+    static {
+        TimeZone.setDefault(TimeZone.getTimeZone(BRAZIL_TIME_ZONE));
+    }
 
-	@Override
-	protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) {
-		return builder.sources(PackIdApiApplication.class);
-	}
+    public static void main(String[] args) {
+        TimeZone.setDefault(TimeZone.getTimeZone(BRAZIL_TIME_ZONE));
+        SpringApplication.run(PackIdApiApplication.class, args);
+    }
+
+    @Override
+    protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) {
+        TimeZone.setDefault(TimeZone.getTimeZone(BRAZIL_TIME_ZONE));
+        return builder.sources(PackIdApiApplication.class);
+    }
 }

@@ -16,6 +16,8 @@ import com.packid.api.domain.repository.ApartmentOccupancyRepository;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
 import com.packid.api.domain.repository.ServiceCompanyRepository;
+import com.packid.api.domain.repository.PoolCardRepository;
+import com.packid.api.domain.model.PoolCard;
 import com.packid.api.service.notification.UnitChangeNotificationPublisher;
 import com.packid.api.integration.google.TenantGoogleAccountService;
 import jakarta.transaction.Transactional;
@@ -56,6 +58,7 @@ public class RegistryEntryService {
     private final SpaceAccessService spaceAccessService;
     private final ApartmentOccupancyRepository occupancyRepository;
     private final ResidentCredentialEmailService residentCredentialEmailService;
+    private final PoolCardRepository poolCardRepository;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final String PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
@@ -75,7 +78,8 @@ public class RegistryEntryService {
             PasswordEncoder passwordEncoder,
             SpaceAccessService spaceAccessService,
             ApartmentOccupancyRepository occupancyRepository,
-            ResidentCredentialEmailService residentCredentialEmailService
+            ResidentCredentialEmailService residentCredentialEmailService,
+            PoolCardRepository poolCardRepository
     ) {
         this.repository = repository;
         this.personRepository = personRepository;
@@ -93,6 +97,7 @@ public class RegistryEntryService {
         this.spaceAccessService = spaceAccessService;
         this.occupancyRepository = occupancyRepository;
         this.residentCredentialEmailService = residentCredentialEmailService;
+        this.poolCardRepository = poolCardRepository;
     }
 
     public List<RegistryEntryResponse> getAll(OidcUser oidcUser, EntryType entryType) {
@@ -268,6 +273,8 @@ public class RegistryEntryService {
                                 r.getLabelPackageCode(),
                                 r.getObservations(),
                                 r.getArrivedAt(),
+                                r.getResidentAcknowledgedAt(),
+                                r.getHandedOverAt(),
                                 r.getCreatedBy()
                         ))
                         .toList(),
@@ -871,6 +878,10 @@ public class RegistryEntryService {
                 : null;
         boolean residentAccessEnabled = residentOccupancy != null && Boolean.TRUE.equals(residentOccupancy.getResidentAccessEnabled())
                 && clean(residentOccupancy.getResidentUsername()) != null && clean(residentOccupancy.getResidentPasswordHash()) != null;
+        PoolCard poolCard = entry.getEntryType() == EntryType.RESIDENT
+                ? poolCardRepository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDesc(entry.getTenantId(), entry.getId()).orElse(null)
+                : null;
+        boolean poolCardValid = poolCard != null && poolCard.getValidUntil() != null && !poolCard.getValidUntil().isBefore(java.time.LocalDate.now());
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),
@@ -912,6 +923,9 @@ public class RegistryEntryService {
                 entry.getDocumentPhotoDriveFileId() != null && !entry.getDocumentPhotoDriveFileId().isBlank(),
                 (appUser != null && sameEmail(entry.getDocumentPhotoOwnerEmail(), appUser.getEmail())) || sameEmail(entry.getDocumentPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getDocumentPhotoFileName(),
+                poolCard != null,
+                poolCardValid,
+                poolCard == null ? null : poolCard.getValidUntil(),
                 entry.getActive(),
                 entry.getCreatedAt(),
                 entry.getUpdatedAt()

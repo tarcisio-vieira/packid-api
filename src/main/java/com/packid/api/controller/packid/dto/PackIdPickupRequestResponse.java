@@ -3,17 +3,12 @@ package com.packid.api.controller.packid.dto;
 import java.time.Instant;
 import java.util.UUID;
 
-public record PackIdRecentResponse(
+public record PackIdPickupRequestResponse(
         UUID id,
-        String bookPage,
         String block,
         String apartment,
         String residentFullName,
         String packageCode,
-        String labelPackageCode,
-        String observations,
         Instant arrivedAt,
-        Instant residentAcknowledgedAt,
-        Instant handedOverAt,
-        String createdBy
+        Instant requestedAt
 ) {}

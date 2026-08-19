@@ -46,6 +46,9 @@ public record RegistryEntryResponse(
         Boolean documentPhotoAvailable,
         Boolean documentPhotoOwnedByCurrentUser,
         String documentPhotoFileName,
+        Boolean poolCardAvailable,
+        Boolean poolCardValid,
+        LocalDate poolCardValidUntil,
         Boolean active,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

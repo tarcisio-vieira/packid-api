@@ -55,7 +55,7 @@ public class ResidentialUnitController {
     @PostMapping
     public ResponseEntity<ResidentialUnitResponse> create(@AuthenticationPrincipal OidcUser principal,
                                                            @Valid @RequestBody ResidentialUnitCreateRequest request) {
-        AppUser user = protectedManager(principal);
+        AppUser user = adminUser(principal);
         requireCurrentTenant(user, request.tenantId());
         ResidentialUnitResponse created = service.create(request, user.getEmail());
         URI location = URI.create("/api/residential-units/" + created.id() + "?tenantId=" + created.tenantId());
@@ -67,7 +67,7 @@ public class ResidentialUnitController {
                                                            @RequestParam(required = false) UUID tenantId,
                                                            @PathVariable UUID id,
                                                            @Valid @RequestBody ResidentialUnitUpdateRequest request) {
-        AppUser user = protectedManager(principal);
+        AppUser user = adminUser(principal);
         requireCurrentTenant(user, tenantId);
         return ResponseEntity.ok(service.update(user.getTenantId(), id, request, user.getEmail()));
     }
@@ -76,7 +76,7 @@ public class ResidentialUnitController {
     public ResponseEntity<Void> logicalDelete(@AuthenticationPrincipal OidcUser principal,
                                                @RequestParam(required = false) UUID tenantId,
                                                @PathVariable UUID id) {
-        AppUser user = protectedManager(principal);
+        AppUser user = adminUser(principal);
         requireCurrentTenant(user, tenantId);
         service.logicalDelete(user.getTenantId(), id, user.getEmail());
         return ResponseEntity.noContent().build();
@@ -88,9 +88,9 @@ public class ResidentialUnitController {
         return user;
     }
 
-    private AppUser protectedManager(OidcUser principal) {
+    private AppUser adminUser(OidcUser principal) {
         AppUser user = authenticatedUserService.requireAppUser(principal);
-        accessControlService.requireProtectedRegistryManager(user);
+        accessControlService.requireAdmin(user);
         return user;
     }
 

@@ -1,6 +1,7 @@
 package com.packid.api.controller.resident;
 
 import com.packid.api.controller.resident.dto.ResidentPortalResponse;
+import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.resident.dto.ResidentProfileUpdateRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
@@ -11,6 +12,8 @@ import com.packid.api.service.ResidentPortalService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +21,7 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -87,4 +91,29 @@ public class ResidentPortalController {
     ) {
         return service.toggleSpace(session, spaceType, assumeResponsibility);
     }
+    @PostMapping("/packages/{packId}/request-pickup")
+    public PackIdRecentResponse requestPackagePickup(HttpSession session, @PathVariable UUID packId) {
+        return service.requestPackagePickup(session, packId);
+    }
+
+    @GetMapping("/branding/logo")
+    public ResponseEntity<byte[]> condominiumLogo(HttpSession session) {
+        GoogleDrivePhotoService.PhotoContent photo = service.condominiumLogo(session);
+        MediaType mediaType;
+        try { mediaType = MediaType.parseMediaType(photo.mimeType()); }
+        catch (Exception ignored) { mediaType = MediaType.APPLICATION_OCTET_STREAM; }
+        return ResponseEntity.ok().contentType(mediaType)
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+                .header("X-Content-Type-Options", "nosniff").body(photo.bytes());
+    }
+
+    @GetMapping(value = "/pool-cards/{cardId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> poolCardPdf(HttpSession session, @PathVariable UUID cardId) {
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename("carteirinha-piscina.pdf", StandardCharsets.UTF_8).build();
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(service.poolCardPdf(session, cardId));
+    }
+
 }

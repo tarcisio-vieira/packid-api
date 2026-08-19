@@ -2,6 +2,7 @@ package com.packid.api.service;
 
 import com.packid.api.controller.packid.dto.PackIdCreateRequest;
 import com.packid.api.controller.packid.dto.PackIdLabelCreateRequest;
+import com.packid.api.controller.packid.dto.PackIdPickupRequestResponse;
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.packid.dto.PackIdResponse;
 import com.packid.api.controller.packid.dto.PackIdUpdateRequest;
@@ -43,6 +44,7 @@ public class PackIdService {
     private final ApplicationEventPublisher eventPublisher;
     private final CondominiumRepository condominiumRepository;
     private final UnitChangeNotificationPublisher unitChangeNotificationPublisher;
+    private final AccessControlService accessControlService;
 
     public PackIdService(
             PackIdRepository repository,
@@ -52,7 +54,8 @@ public class PackIdService {
             RegistryEntryRepository registryEntryRepository,
             CondominiumRepository condominiumRepository,
             ApplicationEventPublisher eventPublisher,
-            UnitChangeNotificationPublisher unitChangeNotificationPublisher
+            UnitChangeNotificationPublisher unitChangeNotificationPublisher,
+            AccessControlService accessControlService
     ) {
         this.repository = repository;
         this.appUserRepository = appUserRepository;
@@ -62,6 +65,7 @@ public class PackIdService {
         this.condominiumRepository = condominiumRepository;
         this.eventPublisher = eventPublisher;
         this.unitChangeNotificationPublisher = unitChangeNotificationPublisher;
+        this.accessControlService = accessControlService;
     }
 
     @Transactional
@@ -370,9 +374,57 @@ public class PackIdService {
                         r.getLabelPackageCode(),
                         r.getObservations(),
                         r.getArrivedAt(),
+                        r.getResidentAcknowledgedAt(),
+                        r.getHandedOverAt(),
                         r.getCreatedBy()
                 ))
                 .toList();
+    }
+
+    @Transactional
+    public List<PackIdPickupRequestResponse> pendingPickupRequests(OidcUser oidcUser) {
+        AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
+        accessControlService.requireOperationalUser(appUser);
+        return repository.findPendingPickupRequests(appUser.getTenantId()).stream()
+                .map(r -> new PackIdPickupRequestResponse(
+                        r.getId(), r.getBlock(), r.getApartment(), r.getResidentFullName(),
+                        cleanOptional(r.getLabelPackageCode()) == null ? r.getPackageCode() : r.getLabelPackageCode(),
+                        r.getArrivedAt(), r.getResidentAcknowledgedAt()))
+                .toList();
+    }
+
+    @Transactional
+    public PackIdRecentResponse handOver(OidcUser oidcUser, UUID id) {
+        AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
+        accessControlService.requireOperationalUser(appUser);
+        PackId p = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Encomenda não encontrada."));
+        if (p.getResidentAcknowledgedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "O morador ainda não solicitou a retirada desta encomenda.");
+        }
+        if (p.getHandedOverAt() == null) {
+            p.setHandedOverAt(LocalDateTime.now());
+            p.setHandedOverByUserId(appUser.getId());
+            p.setUpdatedBy(cleanOptional(appUser.getEmail()) == null ? "sistema" : appUser.getEmail().trim());
+            repository.save(p);
+        }
+        return recentResponseFromEntity(p);
+    }
+
+    private PackIdRecentResponse recentResponseFromEntity(PackId p) {
+        String block = cleanOptional(p.getBuildingBlock());
+        String apartment = cleanOptional(p.getApartment());
+        if ((block == null || apartment == null) && p.getResidentialUnit() != null) {
+            if (block == null) block = cleanOptional(p.getResidentialUnit().getBlock());
+            if (apartment == null) apartment = cleanOptional(p.getResidentialUnit().getApartment());
+        }
+        String resident = p.getPerson() == null ? null : p.getPerson().getFullName();
+        java.time.ZoneId zone = java.time.ZoneId.of("America/Sao_Paulo");
+        return new PackIdRecentResponse(p.getId(), p.getBookPage(), block, apartment, resident,
+                p.getPackageCode(), p.getLabelPackageCode(), p.getObservations(),
+                p.getArrivedAt() == null ? null : p.getArrivedAt().atZone(zone).toInstant(),
+                p.getResidentAcknowledgedAt() == null ? null : p.getResidentAcknowledgedAt().atZone(zone).toInstant(),
+                p.getHandedOverAt() == null ? null : p.getHandedOverAt().atZone(zone).toInstant(), p.getCreatedBy());
     }
 
     private String cleanOptional(String value) {
@@ -423,31 +475,27 @@ public class PackIdService {
     private static final String SYMBOLIC_RESIDENT_NAME = "***";
 
     private ResidentialUnit resolveOrCreateResidentialUnit(UUID tenantId, String block, String apartment) {
-        String unitCode = block + apartment;
-        List<ResidentialUnit> units =
-                residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, unitCode);
-
-        if (units.size() == 1) {
-            return units.get(0);
-        }
-
-        if (units.size() > 1) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Existe mais de uma unidade com o código '" + unitCode + "' neste tenant."
-            );
-        }
-
-        Condominium condominium = resolveDefaultCondominium(tenantId);
-
-        ResidentialUnit unit = new ResidentialUnit();
-        unit.setTenantId(tenantId);
-        unit.setCondominiumId(condominium.getId());
-        unit.setCode(unitCode);
-        unit.setName("Unidade criada automaticamente");
-        unit.setActive(true);
-
-        return residentialUnitRepository.save(unit);
+        return residentialUnitRepository
+                .findByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndDeletedFalse(tenantId, block, apartment)
+                .orElseGet(() -> {
+                    String unitCode = block + apartment;
+                    List<ResidentialUnit> legacy = residentialUnitRepository.findAllByTenantIdAndCodeAndDeletedFalse(tenantId, unitCode);
+                    if (legacy.size() == 1) {
+                        ResidentialUnit unit = legacy.get(0);
+                        unit.setBlock(block);
+                        unit.setApartment(apartment);
+                        if (unit.getName() == null || unit.getName().isBlank() || "Unidade criada automaticamente".equals(unit.getName())) {
+                            unit.setName("Bloco " + block + " Apto " + apartment);
+                        }
+                        return residentialUnitRepository.save(unit);
+                    }
+                    if (legacy.size() > 1) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Existe mais de uma unidade com o código '" + unitCode + "'. Ajuste o cadastro de unidades.");
+                    }
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Bloco " + block + " / Apto " + apartment + " não está cadastrado. Cadastre a unidade nas Configurações antes de registrar a encomenda.");
+                });
     }
 
     private Condominium resolveDefaultCondominium(UUID tenantId) {

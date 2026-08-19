@@ -40,6 +40,12 @@ public class ResidentialUnit extends AuditableEntity {
     @Column(name = "name", length = 150)
     private String name;
 
+    @Column(name = "block", length = 30)
+    private String block;
+
+    @Column(name = "apartment", length = 30)
+    private String apartment;
+
     @Column(name = "active", nullable = false)
     private Boolean active = true;
 }

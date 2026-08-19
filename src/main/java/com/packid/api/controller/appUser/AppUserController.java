@@ -55,6 +55,8 @@ public class AppUserController {
         response.put("canManageSettings", accessControlService.canManageSettings(appUser));
         response.put("canManageProtectedRegistry", accessControlService.canManageProtectedRegistry(appUser));
         response.put("canOperateCondominium", accessControlService.canOperateCondominium(appUser));
+        response.put("canViewPoolCards", accessControlService.canViewPoolCards(appUser));
+        response.put("canManagePoolCards", accessControlService.canManagePoolCards(appUser));
         return response;
     }
 

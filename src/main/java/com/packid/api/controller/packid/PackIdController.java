@@ -1,6 +1,7 @@
 package com.packid.api.controller.packid;
 
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
+import com.packid.api.controller.packid.dto.PackIdPickupRequestResponse;
 import com.packid.api.controller.packid.dto.PackIdCreateRequest;
 import com.packid.api.controller.packid.dto.PackIdResponse;
 import com.packid.api.controller.packid.dto.PackIdUpdateRequest;
@@ -98,4 +99,14 @@ public class PackIdController {
     ) {
         return ResponseEntity.ok(service.getRecentForMe(user, limit, from, to));
     }
+    @GetMapping("/pickup-requests")
+    public ResponseEntity<List<PackIdPickupRequestResponse>> pickupRequests(@AuthenticationPrincipal OidcUser user) {
+        return ResponseEntity.ok(service.pendingPickupRequests(user));
+    }
+
+    @PostMapping("/{id}/hand-over")
+    public ResponseEntity<PackIdRecentResponse> handOver(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
+        return ResponseEntity.ok(service.handOver(user, id));
+    }
+
 }

@@ -1,11 +1,14 @@
 package com.packid.api.service;
 
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
+import com.packid.api.controller.pool.dto.PoolCardResponse;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
 import com.packid.api.controller.resident.dto.ResidentPortalResponse;
 import com.packid.api.controller.resident.dto.ResidentProfileUpdateRequest;
 import com.packid.api.domain.model.ApartmentOccupancy;
 import com.packid.api.domain.model.RegistryEntry;
+import com.packid.api.domain.model.PackId;
+import com.packid.api.domain.model.PoolCard;
 import com.packid.api.domain.repository.PackIdRepository;
 import com.packid.api.domain.repository.PersonRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
@@ -36,6 +39,9 @@ public class ResidentPortalService {
     private final TenantGoogleAccountService googleAccountService;
     private final GoogleDrivePhotoService googleDrivePhotoService;
     private final ImageCompressionService imageCompressionService;
+    private final PoolCardService poolCardService;
+    private final PoolCardPdfService poolCardPdfService;
+    private final CondominiumBrandingService brandingService;
 
     public ResidentPortalService(
             ResidentSessionService residentSessionService,
@@ -49,7 +55,10 @@ public class ResidentPortalService {
             SpaceAccessService spaceAccessService,
             TenantGoogleAccountService googleAccountService,
             GoogleDrivePhotoService googleDrivePhotoService,
-            ImageCompressionService imageCompressionService
+            ImageCompressionService imageCompressionService,
+            PoolCardService poolCardService,
+            PoolCardPdfService poolCardPdfService,
+            CondominiumBrandingService brandingService
     ) {
         this.residentSessionService = residentSessionService;
         this.registryEntryRepository = registryEntryRepository;
@@ -63,6 +72,9 @@ public class ResidentPortalService {
         this.googleAccountService = googleAccountService;
         this.googleDrivePhotoService = googleDrivePhotoService;
         this.imageCompressionService = imageCompressionService;
+        this.poolCardService = poolCardService;
+        this.poolCardPdfService = poolCardPdfService;
+        this.brandingService = brandingService;
     }
 
     public ResidentPortalResponse portal(jakarta.servlet.http.HttpSession session) {
@@ -98,10 +110,66 @@ public class ResidentPortalService {
                         .map(r -> new PackIdRecentResponse(
                                 r.getId(), r.getBookPage(), r.getBlock(), r.getApartment(),
                                 r.getResidentFullName(), r.getPackageCode(), r.getLabelPackageCode(),
-                                r.getObservations(), r.getArrivedAt(), r.getCreatedBy()))
+                                r.getObservations(), r.getArrivedAt(), r.getResidentAcknowledgedAt(),
+                                r.getHandedOverAt(), r.getCreatedBy()))
                         .toList(),
-                spaceAccessService.residentHistory(context)
+                spaceAccessService.residentHistory(context),
+                entries.stream().filter(e -> e.getEntryType() == RegistryEntry.EntryType.RESIDENT)
+                        .map(e -> poolCardService.latestForResident(tenantId, e.getId()))
+                        .filter(java.util.Objects::nonNull).toList(),
+                poolCardService.settingsForTenant(tenantId)
         );
+    }
+
+    @Transactional
+    public PackIdRecentResponse requestPackagePickup(jakarta.servlet.http.HttpSession session, UUID packId) {
+        ResidentSessionService.ResidentContext context = residentSessionService.requirePortalContext(session);
+        PackId p = packIdRepository.findByTenantIdAndIdAndDeletedFalse(context.tenant().getId(), packId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Encomenda não encontrada."));
+        String block = clean(p.getBuildingBlock());
+        String apartment = clean(p.getApartment());
+        if ((block == null || apartment == null) && p.getResidentialUnit() != null) {
+            if (block == null) block = clean(p.getResidentialUnit().getBlock());
+            if (apartment == null) apartment = clean(p.getResidentialUnit().getApartment());
+        }
+        if (!same(block, context.occupancy().getBlock()) || !same(apartment, context.occupancy().getApartment())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta encomenda não pertence à sua unidade.");
+        }
+        if (p.getHandedOverAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta encomenda já foi entregue.");
+        }
+        if (p.getResidentAcknowledgedAt() == null) {
+            p.setResidentAcknowledgedAt(LocalDateTime.now());
+            p.setUpdatedBy("morador-app:" + context.occupancy().getResidentUsername());
+            packIdRepository.save(p);
+        }
+        return packResponse(p, block, apartment);
+    }
+
+    @Transactional
+    public byte[] poolCardPdf(jakarta.servlet.http.HttpSession session, UUID cardId) {
+        ResidentSessionService.ResidentContext context = residentSessionService.requirePortalContext(session);
+        PoolCard card = poolCardService.require(context.tenant().getId(), cardId);
+        RegistryEntry resident = card.getResident();
+        if (resident == null || !same(resident.getBlock(), context.occupancy().getBlock())
+                || !same(resident.getApartment(), context.occupancy().getApartment())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta carteirinha não pertence à sua unidade.");
+        }
+        return poolCardPdfService.render(card);
+    }
+
+    public GoogleDrivePhotoService.PhotoContent condominiumLogo(jakarta.servlet.http.HttpSession session) {
+        ResidentSessionService.ResidentContext context = residentSessionService.requirePortalContext(session);
+        return brandingService.downloadForTenant(context.tenant().getId());
+    }
+
+    private PackIdRecentResponse packResponse(PackId p, String block, String apartment) {
+        java.time.ZoneId zone = java.time.ZoneId.of("America/Sao_Paulo");
+        return new PackIdRecentResponse(p.getId(), p.getBookPage(), block, apartment,
+                p.getPerson() == null ? null : p.getPerson().getFullName(), p.getPackageCode(), p.getLabelPackageCode(),
+                p.getObservations(), p.getArrivedAt() == null ? null : p.getArrivedAt().atZone(zone).toInstant(),
+                p.getResidentAcknowledgedAt() == null ? null : p.getResidentAcknowledgedAt().atZone(zone).toInstant(),
+                p.getHandedOverAt() == null ? null : p.getHandedOverAt().atZone(zone).toInstant(), p.getCreatedBy());
     }
 
     public GoogleDrivePhotoService.PhotoContent photo(jakarta.servlet.http.HttpSession session, UUID entryId) {

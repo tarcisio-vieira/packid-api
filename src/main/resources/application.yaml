@@ -11,6 +11,11 @@ server:
 spring:
   application:
     name: packid-api
+  jackson:
+    time-zone: America/Sao_Paulo
+  datasource:
+    hikari:
+      connection-init-sql: "SET TIME ZONE 'America/Sao_Paulo'"
   servlet:
     multipart:
       max-file-size: 5MB
@@ -40,6 +45,8 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: America/Sao_Paulo
 
 logging:
   level:
