@@ -2,9 +2,11 @@ package com.packid.api.service;
 
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
+import com.packid.api.domain.model.PoolCard;
 import com.packid.api.domain.model.ServiceCompany;
 import com.packid.api.domain.model.SpaceAccessRequest;
 import com.packid.api.domain.repository.RegistryEntryRepository;
+import com.packid.api.domain.repository.PoolCardRepository;
 import com.packid.api.domain.repository.ServiceCompanyRepository;
 import com.packid.api.domain.repository.SpaceAccessRequestRepository;
 import org.apache.poi.ss.usermodel.*;
@@ -12,6 +14,7 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,19 +34,22 @@ public class ManagementExportService {
     private final RegistryEntryRepository registryEntryRepository;
     private final ServiceCompanyRepository serviceCompanyRepository;
     private final SpaceAccessRequestRepository spaceAccessRequestRepository;
+    private final PoolCardRepository poolCardRepository;
 
     public ManagementExportService(
             AuthenticatedUserService authenticatedUserService,
             AccessControlService accessControlService,
             RegistryEntryRepository registryEntryRepository,
             ServiceCompanyRepository serviceCompanyRepository,
-            SpaceAccessRequestRepository spaceAccessRequestRepository
+            SpaceAccessRequestRepository spaceAccessRequestRepository,
+            PoolCardRepository poolCardRepository
     ) {
         this.authenticatedUserService = authenticatedUserService;
         this.accessControlService = accessControlService;
         this.registryEntryRepository = registryEntryRepository;
         this.serviceCompanyRepository = serviceCompanyRepository;
         this.spaceAccessRequestRepository = spaceAccessRequestRepository;
+        this.poolCardRepository = poolCardRepository;
     }
 
     public ExportFile exportRegistry(OidcUser oidcUser, RegistryEntry.EntryType type) {
@@ -153,6 +159,42 @@ public class ManagementExportService {
         )).toList();
 
         return workbook("area-lazer_" + FILE_TIME.format(LocalDateTime.now()) + ".xlsx", "Área de lazer", headers, rows);
+    }
+
+    @Transactional(readOnly = true)
+    public ExportFile exportPoolCards(OidcUser oidcUser) {
+        AppUser user = exportUser(oidcUser);
+        List<PoolCard> cards = poolCardRepository
+                .findAllByTenantIdAndDeletedFalseOrderByValidUntilDesc(user.getTenantId());
+
+        String[] headers = {
+                "Condômino", "Bloco", "Apartamento", "Data de emissão", "Validade (meses)", "Válida até",
+                "Menor de 10 anos", "Situação", "Laudo médico", "Link Google Drive", "Criado em", "Atualizado em"
+        };
+
+        List<List<String>> rows = cards.stream().map(card -> {
+            RegistryEntry resident = card.getResident();
+            boolean valid = card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
+            String fileId = text(card.getMedicalReportDriveFileId());
+            String driveLink = fileId.isBlank() ? "" : "https://drive.google.com/file/d/" + fileId + "/view";
+            return List.of(
+                    resident == null ? "" : text(resident.getName()),
+                    resident == null ? "" : text(resident.getBlock()),
+                    resident == null ? "" : text(resident.getApartment()),
+                    format(card.getIssueDate()),
+                    text(card.getValidityMonths()),
+                    format(card.getValidUntil()),
+                    yesNo(card.getUnderTen()),
+                    valid ? "Dentro da validade" : "Fora da validade",
+                    text(card.getMedicalReportFileName()),
+                    driveLink,
+                    format(card.getCreatedAt()),
+                    format(card.getUpdatedAt())
+            );
+        }).toList();
+
+        return workbook("carteirinhas-piscina_" + FILE_TIME.format(LocalDateTime.now()) + ".xlsx",
+                "Carteirinhas piscina", headers, rows);
     }
 
     private AppUser exportUser(OidcUser oidcUser) {

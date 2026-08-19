@@ -44,6 +44,11 @@ public class ManagementExportController {
         return response(service.exportSpaceAccess(user));
     }
 
+    @GetMapping("/pool-cards")
+    public ResponseEntity<byte[]> poolCards(@AuthenticationPrincipal OidcUser user) {
+        return response(service.exportPoolCards(user));
+    }
+
     private ResponseEntity<byte[]> response(ManagementExportService.ExportFile file) {
         String safeName = file.fileName().replace("\"", "");
         String encoded = java.net.URLEncoder.encode(safeName, StandardCharsets.UTF_8).replace("+", "%20");

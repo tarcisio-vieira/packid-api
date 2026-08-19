@@ -82,6 +82,22 @@ public class PoolCardDocumentService {
         return downloadForCard(card);
     }
 
+    public String driveViewUrl(OidcUser principal, UUID id) {
+        AppUser user = authenticatedUserService.requireAppUser(principal);
+        accessControlService.requirePoolCardManager(user);
+        PoolCard card = poolCardService.require(user.getTenantId(), id);
+        String fileId = clean(card.getMedicalReportDriveFileId());
+        if (fileId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Laudo médico não cadastrado.");
+        }
+        String officialEmail = googleAccountService.getOfficialEmail(card.getTenantId());
+        if (officialEmail == null || !sameEmail(officialEmail, card.getMedicalReportOwnerEmail())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "O laudo não está disponível na conta oficial do condomínio.");
+        }
+        return "https://drive.google.com/file/d/" + fileId + "/view";
+    }
+
     public GoogleDrivePhotoService.PhotoContent downloadForCard(PoolCard card) {
         if (clean(card.getMedicalReportDriveFileId()) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Laudo médico não cadastrado.");
         String officialEmail = googleAccountService.getOfficialEmail(card.getTenantId());

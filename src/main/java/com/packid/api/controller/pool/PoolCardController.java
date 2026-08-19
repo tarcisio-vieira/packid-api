@@ -13,12 +13,14 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -87,6 +89,14 @@ public class PoolCardController {
                 .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
                 .header("X-Content-Type-Options", "nosniff")
                 .body(file.bytes());
+    }
+
+    @GetMapping("/{id}/medical-report/drive")
+    public ResponseEntity<Void> reportOnGoogleDrive(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(documentService.driveViewUrl(user, id)))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .build();
     }
 
     @DeleteMapping("/{id}/medical-report")
