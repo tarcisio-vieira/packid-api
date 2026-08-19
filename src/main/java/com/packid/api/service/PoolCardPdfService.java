@@ -7,7 +7,9 @@ import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.integration.google.GoogleDrivePhotoService;
 import jakarta.transaction.Transactional;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -16,6 +18,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +49,14 @@ public class PoolCardPdfService {
     public byte[] pdf(OidcUser principal, UUID id) {
         AppUser user = authenticatedUserService.requireAppUser(principal);
         accessControlService.requirePoolCardViewer(user);
-        return render(poolCardService.require(user.getTenantId(), id));
+        PoolCard card = poolCardService.require(user.getTenantId(), id);
+        if (card.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha ainda não foi validada pela administração.");
+        }
+        if (card.getValidUntil() == null || card.getValidUntil().isBefore(LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha está vencida.");
+        }
+        return render(card);
     }
 
     public byte[] render(PoolCard card) {

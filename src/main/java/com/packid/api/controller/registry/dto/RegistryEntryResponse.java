@@ -1,6 +1,7 @@
 package com.packid.api.controller.registry.dto;
 
 import com.packid.api.domain.model.RegistryEntry.EntryType;
+import com.packid.api.domain.model.PoolCard;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -46,6 +47,10 @@ public record RegistryEntryResponse(
         Boolean documentPhotoAvailable,
         Boolean documentPhotoOwnedByCurrentUser,
         String documentPhotoFileName,
+        UUID poolCardId,
+        PoolCard.ReviewStatus poolCardReviewStatus,
+        LocalDateTime poolCardValidatedAt,
+        String poolCardValidatedBy,
         Boolean poolCardAvailable,
         Boolean poolCardValid,
         LocalDate poolCardValidUntil,

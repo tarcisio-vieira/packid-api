@@ -62,3 +62,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/master/db.changelog-0029-recanto-residential-units.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0030-pool-card-review.yaml

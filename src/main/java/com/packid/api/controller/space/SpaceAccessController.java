@@ -1,6 +1,8 @@
 package com.packid.api.controller.space;
 
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
+import com.packid.api.controller.space.dto.SpaceAccessPageResponse;
+import com.packid.api.controller.space.dto.SpaceRegularizationResponse;
 import com.packid.api.domain.model.SpaceAccessRequest;
 import com.packid.api.service.SpaceAccessService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,6 +38,18 @@ public class SpaceAccessController {
         return service.report(user, spaceType, from, to);
     }
 
+    @GetMapping("/page")
+    public SpaceAccessPageResponse reportPage(
+            @AuthenticationPrincipal OidcUser user,
+            @RequestParam(required = false) SpaceAccessRequest.SpaceType spaceType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int size
+    ) {
+        return service.reportPage(user, spaceType, from, to, page, size);
+    }
+
     @PostMapping("/{id}/release")
     public SpaceAccessResponse release(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
         return service.release(user, id);
@@ -44,5 +58,16 @@ public class SpaceAccessController {
     @PostMapping("/{id}/complete")
     public SpaceAccessResponse complete(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
         return service.complete(user, id);
+    }
+
+    @PostMapping("/{id}/regularize")
+    public SpaceAccessResponse regularize(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
+        return service.regularize(user, id);
+    }
+
+    @PostMapping("/regularize-open")
+    public SpaceRegularizationResponse regularizeOpen(@AuthenticationPrincipal OidcUser user,
+                                                       @RequestParam(required = false) SpaceAccessRequest.SpaceType spaceType) {
+        return new SpaceRegularizationResponse(service.regularizeOpen(user, spaceType));
     }
 }

@@ -879,9 +879,10 @@ public class RegistryEntryService {
         boolean residentAccessEnabled = residentOccupancy != null && Boolean.TRUE.equals(residentOccupancy.getResidentAccessEnabled())
                 && clean(residentOccupancy.getResidentUsername()) != null && clean(residentOccupancy.getResidentPasswordHash()) != null;
         PoolCard poolCard = entry.getEntryType() == EntryType.RESIDENT
-                ? poolCardRepository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDesc(entry.getTenantId(), entry.getId()).orElse(null)
+                ? poolCardRepository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(entry.getTenantId(), entry.getId()).orElse(null)
                 : null;
-        boolean poolCardValid = poolCard != null && poolCard.getValidUntil() != null && !poolCard.getValidUntil().isBefore(java.time.LocalDate.now());
+        boolean poolCardValid = poolCard != null && poolCard.getReviewStatus() == PoolCard.ReviewStatus.APPROVED
+                && poolCard.getValidUntil() != null && !poolCard.getValidUntil().isBefore(java.time.LocalDate.now());
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),
@@ -923,6 +924,10 @@ public class RegistryEntryService {
                 entry.getDocumentPhotoDriveFileId() != null && !entry.getDocumentPhotoDriveFileId().isBlank(),
                 (appUser != null && sameEmail(entry.getDocumentPhotoOwnerEmail(), appUser.getEmail())) || sameEmail(entry.getDocumentPhotoOwnerEmail(), officialGoogleEmail),
                 entry.getDocumentPhotoFileName(),
+                poolCard == null ? null : poolCard.getId(),
+                poolCard == null ? null : poolCard.getReviewStatus(),
+                poolCard == null ? null : poolCard.getValidatedAt(),
+                poolCard == null ? null : poolCard.getValidatedBy(),
                 poolCard != null,
                 poolCardValid,
                 poolCard == null ? null : poolCard.getValidUntil(),

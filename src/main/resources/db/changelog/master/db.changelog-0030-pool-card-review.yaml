@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0030-pool-card-review
+      author: openai
+      changes:
+        - addColumn:
+            tableName: pool_card
+            columns:
+              - column:
+                  name: review_status
+                  type: varchar(30)
+                  defaultValue: PENDING_REVIEW
+                  constraints: { nullable: false }
+              - column: { name: medical_report_submitted_at, type: timestamp }
+              - column: { name: validated_at, type: timestamp }
+              - column: { name: validated_by, type: varchar(255) }
+              - column: { name: review_notes, type: varchar(500) }
+        - sql:
+            splitStatements: false
+            sql: |
+              UPDATE pool_card
+                 SET review_status = CASE
+                       WHEN medical_report_drive_file_id IS NOT NULL AND trim(medical_report_drive_file_id) <> '' THEN 'APPROVED'
+                       ELSE 'PENDING_REVIEW'
+                     END,
+                     medical_report_submitted_at = CASE
+                       WHEN medical_report_drive_file_id IS NOT NULL AND trim(medical_report_drive_file_id) <> ''
+                         THEN COALESCE(updated_at, created_at)
+                       ELSE NULL
+                     END,
+                     validated_at = CASE
+                       WHEN medical_report_drive_file_id IS NOT NULL AND trim(medical_report_drive_file_id) <> ''
+                         THEN COALESCE(updated_at, created_at)
+                       ELSE NULL
+                     END,
+                     validated_by = CASE
+                       WHEN medical_report_drive_file_id IS NOT NULL AND trim(medical_report_drive_file_id) <> ''
+                         THEN COALESCE(updated_by, created_by, 'migration-0030')
+                       ELSE NULL
+                     END
+               WHERE deleted = false;
+        - createIndex:
+            tableName: pool_card
+            indexName: idx_pool_card_tenant_review_status
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: review_status }
+              - column: { name: medical_report_submitted_at }

@@ -41,6 +41,7 @@ public class ResidentPortalService {
     private final ImageCompressionService imageCompressionService;
     private final PoolCardService poolCardService;
     private final PoolCardPdfService poolCardPdfService;
+    private final PoolCardDocumentService poolCardDocumentService;
     private final CondominiumBrandingService brandingService;
 
     public ResidentPortalService(
@@ -58,6 +59,7 @@ public class ResidentPortalService {
             ImageCompressionService imageCompressionService,
             PoolCardService poolCardService,
             PoolCardPdfService poolCardPdfService,
+            PoolCardDocumentService poolCardDocumentService,
             CondominiumBrandingService brandingService
     ) {
         this.residentSessionService = residentSessionService;
@@ -74,6 +76,7 @@ public class ResidentPortalService {
         this.imageCompressionService = imageCompressionService;
         this.poolCardService = poolCardService;
         this.poolCardPdfService = poolCardPdfService;
+        this.poolCardDocumentService = poolCardDocumentService;
         this.brandingService = brandingService;
     }
 
@@ -155,6 +158,12 @@ public class ResidentPortalService {
                 || !same(resident.getApartment(), context.occupancy().getApartment())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta carteirinha não pertence à sua unidade.");
         }
+        if (card.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha ainda não foi validada pela administração.");
+        }
+        if (card.getValidUntil() == null || card.getValidUntil().isBefore(java.time.LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha está vencida.");
+        }
         return poolCardPdfService.render(card);
     }
 
@@ -209,19 +218,26 @@ public class ResidentPortalService {
         if (entry.getEntryType() != RegistryEntry.EntryType.RESIDENT || !Boolean.TRUE.equals(entry.getActive())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente dados de condôminos ativos podem ser atualizados pelo portal.");
         }
-        // Campos estruturais (nome, documento, proprietário, nascimento, PNE, bloco/apto e ocupação)
-        // permanecem exclusivos da administração/secretaria.
+        // Nome, proprietário, nascimento, PNE, bloco/apto e ocupação permanecem exclusivos da administração/secretaria.
         String phone = clean(request.phone());
         String email = clean(request.email());
+        String document = clean(request.document());
         if (email != null) {
             personRepository.findByTenantIdAndEmailAndDeletedFalse(context.tenant().getId(), email)
                     .filter(other -> entry.getPersonId() == null || !other.getId().equals(entry.getPersonId()))
                     .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT,
                             "Este e-mail já está vinculado a outro condômino."); });
         }
+        if (document != null) {
+            personRepository.findByTenantIdAndDocumentAndDeletedFalse(context.tenant().getId(), document)
+                    .filter(other -> entry.getPersonId() == null || !other.getId().equals(entry.getPersonId()))
+                    .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Este documento já está vinculado a outro condômino."); });
+        }
         entry.setPhone(phone);
         entry.setEmail(email);
         entry.setProfession(clean(request.profession()));
+        entry.setDocument(document);
         String actor = "morador:" + context.occupancy().getResidentUsername();
         entry.setUpdatedBy(actor);
         if (entry.getPersonId() != null) {
@@ -229,6 +245,7 @@ public class ResidentPortalService {
                     .ifPresent(person -> {
                         person.setPhone(phone);
                         person.setEmail(email);
+                        person.setDocument(document);
                         person.setUpdatedBy(actor);
                         personRepository.save(person);
                     });
@@ -270,6 +287,22 @@ public class ResidentPortalService {
             try { googleDrivePhotoService.deletePhoto(token, oldFileId); } catch (Exception ignored) { }
         }
         return registryEntryService.toResidentResponse(saved, context.tenant().getId());
+    }
+
+    @Transactional
+    public PoolCardResponse uploadPoolCardMedicalReport(jakarta.servlet.http.HttpSession session, UUID residentEntryId, MultipartFile file) {
+        ResidentSessionService.ResidentContext context = residentSessionService.requirePortalContext(session);
+        RegistryEntry entry = registryEntryRepository
+                .findByTenantIdAndIdAndDeletedFalse(context.tenant().getId(), residentEntryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Condômino não encontrado."));
+        requireSameResidentUnit(context, entry);
+        if (entry.getEntryType() != RegistryEntry.EntryType.RESIDENT || !Boolean.TRUE.equals(entry.getActive())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente condôminos ativos podem enviar laudo médico.");
+        }
+        String actor = "morador:" + context.occupancy().getResidentUsername();
+        PoolCard card = poolCardService.ensurePendingCardForResident(context.tenant().getId(), entry, actor);
+        PoolCard saved = poolCardDocumentService.uploadForResident(card, file, actor);
+        return poolCardService.toResponse(saved);
     }
 
     public com.packid.api.controller.space.dto.SpaceKeyAvailabilityResponse spaceAvailability(

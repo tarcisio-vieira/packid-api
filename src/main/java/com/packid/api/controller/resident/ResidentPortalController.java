@@ -1,6 +1,7 @@
 package com.packid.api.controller.resident;
 
 import com.packid.api.controller.resident.dto.ResidentPortalResponse;
+import com.packid.api.controller.pool.dto.PoolCardResponse;
 import com.packid.api.controller.packid.dto.PackIdRecentResponse;
 import com.packid.api.controller.resident.dto.ResidentProfileUpdateRequest;
 import com.packid.api.controller.registry.dto.RegistryEntryResponse;
@@ -68,6 +69,13 @@ public class ResidentPortalController {
             @RequestPart("file") MultipartFile file
     ) {
         return service.uploadProfilePhoto(session, entryId, file);
+    }
+
+    @PutMapping(path = "/pool-cards/residents/{residentEntryId}/medical-report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public PoolCardResponse uploadPoolCardMedicalReport(
+            HttpSession session, @PathVariable UUID residentEntryId, @RequestPart("file") MultipartFile file
+    ) {
+        return service.uploadPoolCardMedicalReport(session, residentEntryId, file);
     }
 
     @GetMapping("/spaces")

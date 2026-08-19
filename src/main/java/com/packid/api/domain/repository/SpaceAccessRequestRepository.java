@@ -2,6 +2,8 @@ package com.packid.api.domain.repository;
 
 import com.packid.api.domain.model.SpaceAccessRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +18,9 @@ public interface SpaceAccessRequestRepository extends JpaRepository<SpaceAccessR
 
     List<SpaceAccessRequest> findAllByTenantIdAndStatusInAndDeletedFalseOrderByRequestedAtAsc(
             UUID tenantId, List<SpaceAccessRequest.Status> statuses);
+
+    List<SpaceAccessRequest> findAllByTenantIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtAsc(
+            UUID tenantId, SpaceAccessRequest.SpaceType spaceType, List<SpaceAccessRequest.Status> statuses);
 
     List<SpaceAccessRequest> findAllByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByRequestedAtDesc(
             UUID tenantId, UUID residentRegistryEntryId);
@@ -95,4 +100,31 @@ public interface SpaceAccessRequestRepository extends JpaRepository<SpaceAccessR
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to
     );
+
+    @Query(value = """
+            select s from SpaceAccessRequest s
+             where s.tenantId = :tenantId and s.deleted = false
+               and s.requestedAt >= :from and s.requestedAt < :to
+             order by s.requestedAt desc
+            """, countQuery = """
+            select count(s) from SpaceAccessRequest s
+             where s.tenantId = :tenantId and s.deleted = false
+               and s.requestedAt >= :from and s.requestedAt < :to
+            """)
+    Page<SpaceAccessRequest> reportPageAll(@Param("tenantId") UUID tenantId,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, Pageable pageable);
+
+    @Query(value = """
+            select s from SpaceAccessRequest s
+             where s.tenantId = :tenantId and s.deleted = false and s.spaceType = :spaceType
+               and s.requestedAt >= :from and s.requestedAt < :to
+             order by s.requestedAt desc
+            """, countQuery = """
+            select count(s) from SpaceAccessRequest s
+             where s.tenantId = :tenantId and s.deleted = false and s.spaceType = :spaceType
+               and s.requestedAt >= :from and s.requestedAt < :to
+            """)
+    Page<SpaceAccessRequest> reportPageBySpaceType(@Param("tenantId") UUID tenantId,
+            @Param("spaceType") SpaceAccessRequest.SpaceType spaceType,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, Pageable pageable);
 }

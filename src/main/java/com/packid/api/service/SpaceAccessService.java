@@ -1,6 +1,7 @@
 package com.packid.api.service;
 
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
+import com.packid.api.controller.space.dto.SpaceAccessPageResponse;
 import com.packid.api.controller.space.dto.SpaceKeyAvailabilityResponse;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
@@ -9,6 +10,8 @@ import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.repository.SpaceAccessRequestRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -83,6 +86,22 @@ public class SpaceAccessService {
                 .toList();
     }
 
+    public SpaceAccessPageResponse reportPage(
+            OidcUser oidcUser, SpaceAccessRequest.SpaceType spaceType, LocalDate from, LocalDate to, int page, int size
+    ) {
+        AppUser user = operationalUser(oidcUser);
+        LocalDateTime fromDateTime = from == null ? LocalDate.of(1900, 1, 1).atStartOfDay() : from.atStartOfDay();
+        LocalDateTime toDateTime = to == null ? LocalDate.of(9999, 12, 31).atTime(23, 59, 59, 999_999_999) : to.plusDays(1).atStartOfDay();
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(5, Math.min(size, 50));
+        Page<SpaceAccessRequest> result = spaceType == null
+                ? repository.reportPageAll(user.getTenantId(), fromDateTime, toDateTime, PageRequest.of(safePage, safeSize))
+                : repository.reportPageBySpaceType(user.getTenantId(), spaceType, fromDateTime, toDateTime, PageRequest.of(safePage, safeSize));
+        return new SpaceAccessPageResponse(
+                result.getContent().stream().map(item -> toResponse(item, user.getTenantId())).toList(),
+                result.getTotalElements(), result.getTotalPages(), result.getNumber(), result.getSize());
+    }
+
     @Transactional
     public SpaceAccessResponse release(OidcUser oidcUser, UUID id) {
         AppUser user = operationalUser(oidcUser);
@@ -118,6 +137,36 @@ public class SpaceAccessService {
         request.setCompletedBy(actor(user));
         request.setUpdatedBy(actor(user));
         return toResponse(repository.save(request), user.getTenantId());
+    }
+
+    @Transactional
+    public SpaceAccessResponse regularize(OidcUser oidcUser, UUID id) {
+        AppUser user = operationalUser(oidcUser);
+        SpaceAccessRequest request = requireRequest(user.getTenantId(), id);
+        if (!ACTIVE_STATUSES.contains(request.getStatus())) return toResponse(request, user.getTenantId());
+        regularizeRequest(request, user);
+        return toResponse(repository.save(request), user.getTenantId());
+    }
+
+    @Transactional
+    public int regularizeOpen(OidcUser oidcUser, SpaceAccessRequest.SpaceType spaceType) {
+        AppUser user = operationalUser(oidcUser);
+        List<SpaceAccessRequest> requests = spaceType == null
+                ? repository.findAllByTenantIdAndStatusInAndDeletedFalseOrderByRequestedAtAsc(user.getTenantId(), ACTIVE_STATUSES)
+                : repository.findAllByTenantIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtAsc(user.getTenantId(), spaceType, ACTIVE_STATUSES);
+        requests.forEach(item -> regularizeRequest(item, user));
+        repository.saveAll(requests);
+        return requests.size();
+    }
+
+    private void regularizeRequest(SpaceAccessRequest request, AppUser user) {
+        LocalDateTime now = LocalDateTime.now();
+        request.setStatus(SpaceAccessRequest.Status.COMPLETED);
+        request.setCompletedAt(now);
+        request.setCompletedBy(actor(user));
+        request.setUpdatedBy(actor(user));
+        request.setNotes(appendNote(request.getNotes(),
+                "Pendência de chave regularizada manualmente por " + actor(user) + " em " + AUDIT_DATE_TIME.format(now) + "."));
     }
 
     public SpaceKeyAvailabilityResponse residentAvailability(

@@ -60,30 +60,31 @@ public class PoolCardService {
      * para evitar uma consulta adicional para cada carteirinha (N+1).
      */
     @Transactional
-    public PoolCardPageResponse list(OidcUser oidcUser, String search, int page, int size) {
+    public PoolCardPageResponse list(OidcUser oidcUser, String search, String expiryFilter, int page, int size) {
         AppUser user = viewer(oidcUser);
         int safePage = Math.max(0, page);
         int safeSize = Math.max(5, Math.min(size, 50));
         String q = clean(search);
         String normalizedSearch = q == null ? "" : q.toLowerCase();
+        LocalDate today = LocalDate.now();
+        String filter = clean(expiryFilter);
 
-        Page<PoolCard> result = repository.searchPage(
-                user.getTenantId(),
-                normalizedSearch,
-                PageRequest.of(safePage, safeSize)
-        );
+        Page<PoolCard> result;
+        if ("EXPIRED".equalsIgnoreCase(filter)) {
+            result = repository.searchExpired(user.getTenantId(), normalizedSearch, today, PageRequest.of(safePage, safeSize));
+        } else if ("WEEK".equalsIgnoreCase(filter)) {
+            result = repository.searchExpiringBetween(user.getTenantId(), normalizedSearch, today, today.plusDays(7), PageRequest.of(safePage, safeSize));
+        } else if ("MONTH".equalsIgnoreCase(filter)) {
+            result = repository.searchExpiringBetween(user.getTenantId(), normalizedSearch, today, today.plusMonths(1), PageRequest.of(safePage, safeSize));
+        } else {
+            result = repository.searchPage(user.getTenantId(), normalizedSearch, PageRequest.of(safePage, safeSize));
+        }
 
         List<PoolCardResponse> content = result.getContent().stream()
                 .map(card -> toResponse(card, card.getResident()))
                 .toList();
 
-        return new PoolCardPageResponse(
-                content,
-                result.getTotalElements(),
-                result.getTotalPages(),
-                result.getNumber(),
-                result.getSize()
-        );
+        return new PoolCardPageResponse(content, result.getTotalElements(), result.getTotalPages(), result.getNumber(), result.getSize());
     }
 
     /**
@@ -134,6 +135,7 @@ public class PoolCardService {
         card.setValidityMonths(months);
         card.setValidUntil(request.issueDate().plusMonths(months));
         card.setUnderTen(Boolean.TRUE.equals(request.underTen()));
+        card.setReviewStatus(PoolCard.ReviewStatus.PENDING_REVIEW);
         card.setCreatedBy(actor(user));
         return toResponse(repository.save(card), resident);
     }
@@ -156,6 +158,64 @@ public class PoolCardService {
     }
 
     @Transactional
+    public List<PoolCardResponse> pendingReviews(OidcUser oidcUser, int limit) {
+        AppUser user = manager(oidcUser);
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        return repository.findAllByTenantIdAndReviewStatusAndDeletedFalseOrderByMedicalReportSubmittedAtAsc(
+                        user.getTenantId(), PoolCard.ReviewStatus.PENDING_REVIEW, PageRequest.of(0, safeLimit))
+                .stream().filter(card -> clean(card.getMedicalReportDriveFileId()) != null)
+                .map(this::toResponse).toList();
+    }
+
+    @Transactional
+    public PoolCardResponse approve(OidcUser oidcUser, UUID id, String notes) {
+        AppUser user = manager(oidcUser);
+        PoolCard card = require(user.getTenantId(), id);
+        if (clean(card.getMedicalReportDriveFileId()) == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Anexe o laudo médico antes de validar a carteirinha.");
+        }
+        card.setReviewStatus(PoolCard.ReviewStatus.APPROVED);
+        card.setValidatedAt(LocalDateTime.now());
+        card.setValidatedBy(actor(user));
+        card.setReviewNotes(clean(notes));
+        card.setUpdatedBy(actor(user));
+        return toResponse(repository.save(card));
+    }
+
+    @Transactional
+    public PoolCardResponse reject(OidcUser oidcUser, UUID id, String notes) {
+        AppUser user = manager(oidcUser);
+        PoolCard card = require(user.getTenantId(), id);
+        card.setReviewStatus(PoolCard.ReviewStatus.REJECTED);
+        card.setValidatedAt(LocalDateTime.now());
+        card.setValidatedBy(actor(user));
+        card.setReviewNotes(clean(notes));
+        card.setUpdatedBy(actor(user));
+        return toResponse(repository.save(card));
+    }
+
+    @Transactional
+    public PoolCard ensurePendingCardForResident(UUID tenantId, RegistryEntry resident, String actor) {
+        PoolCard latest = repository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(tenantId, resident.getId()).orElse(null);
+        if (latest != null && latest.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
+            return latest;
+        }
+        Condominium condominium = brandingService.requireCondominium(tenantId);
+        int months = validityMonths(condominium);
+        LocalDate issueDate = LocalDate.now();
+        PoolCard card = new PoolCard();
+        card.setTenantId(tenantId);
+        card.setResidentRegistryEntryId(resident.getId());
+        card.setIssueDate(issueDate);
+        card.setValidityMonths(months);
+        card.setValidUntil(issueDate.plusMonths(months));
+        card.setUnderTen(resident.getBirthDate() != null && resident.getBirthDate().plusYears(10).isAfter(issueDate));
+        card.setReviewStatus(PoolCard.ReviewStatus.PENDING_REVIEW);
+        card.setCreatedBy(actor == null || actor.isBlank() ? "morador" : actor);
+        return repository.save(card);
+    }
+
+    @Transactional
     public void delete(OidcUser oidcUser, UUID id) {
         AppUser user = manager(oidcUser);
         PoolCard card = require(user.getTenantId(), id);
@@ -167,7 +227,7 @@ public class PoolCardService {
 
     @Transactional
     public PoolCardResponse latestForResident(UUID tenantId, UUID residentEntryId) {
-        return repository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDesc(tenantId, residentEntryId)
+        return repository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(tenantId, residentEntryId)
                 .map(this::toResponse).orElse(null);
     }
 
@@ -221,7 +281,8 @@ public class PoolCardService {
     }
 
     private PoolCardResponse toResponse(PoolCard card, RegistryEntry resident) {
-        boolean valid = card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
+        boolean valid = card.getReviewStatus() == PoolCard.ReviewStatus.APPROVED
+                && card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
         return new PoolCardResponse(
                 card.getId(), card.getResidentRegistryEntryId(),
                 resident == null ? "Condômino" : resident.getName(),
@@ -230,6 +291,8 @@ public class PoolCardService {
                 card.getIssueDate(), card.getValidityMonths() == null ? 0 : card.getValidityMonths(),
                 card.getValidUntil(), Boolean.TRUE.equals(card.getUnderTen()), valid,
                 clean(card.getMedicalReportDriveFileId()) != null, card.getMedicalReportFileName(),
+                card.getReviewStatus() == null ? PoolCard.ReviewStatus.PENDING_REVIEW : card.getReviewStatus(),
+                card.getMedicalReportSubmittedAt(), card.getValidatedAt(), card.getValidatedBy(), card.getReviewNotes(),
                 card.getCreatedAt(), card.getUpdatedAt());
     }
 

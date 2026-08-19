@@ -2,6 +2,7 @@ package com.packid.api.controller.pool;
 
 import com.packid.api.controller.pool.dto.PoolCardPageResponse;
 import com.packid.api.controller.pool.dto.PoolCardRequest;
+import com.packid.api.controller.pool.dto.PoolCardReviewRequest;
 import com.packid.api.controller.pool.dto.PoolCardResidentOptionResponse;
 import com.packid.api.controller.pool.dto.PoolCardResponse;
 import com.packid.api.controller.pool.dto.PoolCardSettingsResponse;
@@ -50,9 +51,28 @@ public class PoolCardController {
     @GetMapping("/page")
     public PoolCardPageResponse list(@AuthenticationPrincipal OidcUser user,
                                      @RequestParam(required = false, defaultValue = "") String search,
+                                     @RequestParam(required = false, defaultValue = "") String expiryFilter,
                                      @RequestParam(required = false, defaultValue = "0") int page,
                                      @RequestParam(required = false, defaultValue = "10") int size) {
-        return service.list(user, search, page, size);
+        return service.list(user, search, expiryFilter, page, size);
+    }
+
+    @GetMapping("/pending-review")
+    public List<PoolCardResponse> pendingReview(@AuthenticationPrincipal OidcUser user,
+                                                @RequestParam(required = false, defaultValue = "20") int limit) {
+        return service.pendingReviews(user, limit);
+    }
+
+    @PostMapping("/{id}/approve")
+    public PoolCardResponse approve(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id,
+                                    @Valid @RequestBody(required = false) PoolCardReviewRequest request) {
+        return service.approve(user, id, request == null ? null : request.notes());
+    }
+
+    @PostMapping("/{id}/reject")
+    public PoolCardResponse reject(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id,
+                                   @Valid @RequestBody(required = false) PoolCardReviewRequest request) {
+        return service.reject(user, id, request == null ? null : request.notes());
     }
 
     @GetMapping("/residents")

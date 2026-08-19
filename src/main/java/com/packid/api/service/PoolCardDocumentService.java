@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,24 +48,38 @@ public class PoolCardDocumentService {
         AppUser user = authenticatedUserService.requireAppUser(principal);
         accessControlService.requirePoolCardManager(user);
         PoolCard card = poolCardService.require(user.getTenantId(), id);
+        return uploadForCard(card, file, actor(user));
+    }
+
+    @Transactional
+    public PoolCard uploadForResident(PoolCard card, MultipartFile file, String actor) {
+        return uploadForCard(card, file, clean(actor) == null ? "morador" : actor.trim());
+    }
+
+    private PoolCard uploadForCard(PoolCard card, MultipartFile file, String actor) {
         validate(file);
-        String officialEmail = googleAccountService.getOfficialEmail(user.getTenantId());
+        String officialEmail = googleAccountService.getOfficialEmail(card.getTenantId());
         if (officialEmail == null) throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
                 "Conecte a conta Google oficial antes de enviar o laudo médico.");
-        String token = googleAccountService.freshAccessToken(user.getTenantId());
+        String token = googleAccountService.freshAccessToken(card.getTenantId());
         RegistryEntry resident = card.getResident();
         String mime = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
         String name = clean(file.getOriginalFilename()) == null ? "laudo-medico" : file.getOriginalFilename().trim();
         String oldFileId = card.getMedicalReportDriveFileId();
         try {
             GoogleDrivePhotoService.DriveFile uploaded = driveService.uploadPhoto(
-                    token, user.getTenantId(), card.getId(), "POOL_CARD_REPORT",
+                    token, card.getTenantId(), card.getId(), "POOL_CARD_REPORT",
                     name, mime, file.getBytes(), resident == null ? null : resident.getBlock(), resident == null ? null : resident.getApartment());
             card.setMedicalReportDriveFileId(uploaded.id());
             card.setMedicalReportMimeType(mime);
             card.setMedicalReportFileName(name);
             card.setMedicalReportOwnerEmail(officialEmail);
-            card.setUpdatedBy(actor(user));
+            card.setReviewStatus(PoolCard.ReviewStatus.PENDING_REVIEW);
+            card.setMedicalReportSubmittedAt(LocalDateTime.now());
+            card.setValidatedAt(null);
+            card.setValidatedBy(null);
+            card.setReviewNotes(null);
+            card.setUpdatedBy(actor);
             PoolCard saved = repository.save(card);
             if (oldFileId != null && !oldFileId.equals(uploaded.id())) {
                 try { driveService.deletePhoto(token, oldFileId); } catch (Exception ignored) { }
@@ -121,6 +136,11 @@ public class PoolCardDocumentService {
         card.setMedicalReportMimeType(null);
         card.setMedicalReportFileName(null);
         card.setMedicalReportOwnerEmail(null);
+        card.setReviewStatus(PoolCard.ReviewStatus.PENDING_REVIEW);
+        card.setMedicalReportSubmittedAt(null);
+        card.setValidatedAt(null);
+        card.setValidatedBy(null);
+        card.setReviewNotes(null);
         card.setUpdatedBy(actor(user));
         return repository.save(card);
     }

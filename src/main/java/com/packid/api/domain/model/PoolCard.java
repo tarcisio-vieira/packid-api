@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
@@ -13,6 +14,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "pool_card")
 public class PoolCard extends AuditableEntity {
+    public enum ReviewStatus { PENDING_REVIEW, APPROVED, REJECTED }
+
     @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     private UUID tenantId;
 
@@ -50,4 +53,20 @@ public class PoolCard extends AuditableEntity {
 
     @Column(name = "medical_report_owner_email", length = 255)
     private String medicalReportOwnerEmail;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status", nullable = false, length = 30)
+    private ReviewStatus reviewStatus = ReviewStatus.PENDING_REVIEW;
+
+    @Column(name = "medical_report_submitted_at")
+    private LocalDateTime medicalReportSubmittedAt;
+
+    @Column(name = "validated_at")
+    private LocalDateTime validatedAt;
+
+    @Column(name = "validated_by", length = 255)
+    private String validatedBy;
+
+    @Column(name = "review_notes", length = 500)
+    private String reviewNotes;
 }
