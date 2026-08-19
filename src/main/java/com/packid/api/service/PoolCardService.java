@@ -125,6 +125,10 @@ public class PoolCardService {
     public PoolCardResponse create(OidcUser oidcUser, PoolCardRequest request) {
         AppUser user = manager(oidcUser);
         RegistryEntry resident = requireResident(user.getTenantId(), request.residentRegistryEntryId());
+        if (repository.existsByTenantIdAndResidentRegistryEntryIdAndDeletedFalse(user.getTenantId(), resident.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Este condômino já possui uma carteirinha de piscina. Edite a carteirinha existente.");
+        }
         Condominium condominium = brandingService.requireCondominium(user.getTenantId());
         int months = validityMonths(condominium);
 
@@ -135,7 +139,9 @@ public class PoolCardService {
         card.setValidityMonths(months);
         card.setValidUntil(request.issueDate().plusMonths(months));
         card.setUnderTen(Boolean.TRUE.equals(request.underTen()));
-        card.setReviewStatus(PoolCard.ReviewStatus.PENDING_REVIEW);
+        card.setReviewStatus(PoolCard.ReviewStatus.APPROVED);
+        card.setValidatedAt(LocalDateTime.now());
+        card.setValidatedBy(actor(user));
         card.setCreatedBy(actor(user));
         return toResponse(repository.save(card), resident);
     }
@@ -145,6 +151,11 @@ public class PoolCardService {
         AppUser user = manager(oidcUser);
         PoolCard card = require(user.getTenantId(), id);
         RegistryEntry resident = requireResident(user.getTenantId(), request.residentRegistryEntryId());
+        if (!resident.getId().equals(card.getResidentRegistryEntryId())
+                && repository.existsByTenantIdAndResidentRegistryEntryIdAndDeletedFalse(user.getTenantId(), resident.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Este condômino já possui uma carteirinha de piscina. Edite a carteirinha existente.");
+        }
         Condominium condominium = brandingService.requireCondominium(user.getTenantId());
         int months = validityMonths(condominium);
 
@@ -153,6 +164,10 @@ public class PoolCardService {
         card.setValidityMonths(months);
         card.setValidUntil(request.issueDate().plusMonths(months));
         card.setUnderTen(Boolean.TRUE.equals(request.underTen()));
+        card.setReviewStatus(PoolCard.ReviewStatus.APPROVED);
+        card.setValidatedAt(LocalDateTime.now());
+        card.setValidatedBy(actor(user));
+        card.setReviewNotes(null);
         card.setUpdatedBy(actor(user));
         return toResponse(repository.save(card), resident);
     }
@@ -197,7 +212,7 @@ public class PoolCardService {
     @Transactional
     public PoolCard ensurePendingCardForResident(UUID tenantId, RegistryEntry resident, String actor) {
         PoolCard latest = repository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(tenantId, resident.getId()).orElse(null);
-        if (latest != null && latest.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
+        if (latest != null) {
             return latest;
         }
         Condominium condominium = brandingService.requireCondominium(tenantId);
@@ -281,8 +296,7 @@ public class PoolCardService {
     }
 
     private PoolCardResponse toResponse(PoolCard card, RegistryEntry resident) {
-        boolean valid = card.getReviewStatus() == PoolCard.ReviewStatus.APPROVED
-                && card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
+        boolean valid = card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
         return new PoolCardResponse(
                 card.getId(), card.getResidentRegistryEntryId(),
                 resident == null ? "Condômino" : resident.getName(),

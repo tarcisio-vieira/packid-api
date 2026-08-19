@@ -169,14 +169,12 @@ public class ManagementExportService {
 
         String[] headers = {
                 "Condômino", "Bloco", "Apartamento", "Data de emissão", "Validade (meses)", "Válida até",
-                "Menor de 10 anos", "Situação", "Laudo médico", "Link Google Drive", "Criado em", "Atualizado em"
+                "Menor de 10 anos", "Situação", "Criado em", "Atualizado em"
         };
 
         List<List<String>> rows = cards.stream().map(card -> {
             RegistryEntry resident = card.getResident();
             boolean valid = card.getValidUntil() != null && !card.getValidUntil().isBefore(LocalDate.now());
-            String fileId = text(card.getMedicalReportDriveFileId());
-            String driveLink = fileId.isBlank() ? "" : "https://drive.google.com/file/d/" + fileId + "/view";
             return List.of(
                     resident == null ? "" : text(resident.getName()),
                     resident == null ? "" : text(resident.getBlock()),
@@ -186,8 +184,6 @@ public class ManagementExportService {
                     format(card.getValidUntil()),
                     yesNo(card.getUnderTen()),
                     valid ? "Dentro da validade" : "Fora da validade",
-                    text(card.getMedicalReportFileName()),
-                    driveLink,
                     format(card.getCreatedAt()),
                     format(card.getUpdatedAt())
             );

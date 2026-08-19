@@ -65,3 +65,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/master/db.changelog-0030-pool-card-review.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0031-pool-card-unique-resident.yaml

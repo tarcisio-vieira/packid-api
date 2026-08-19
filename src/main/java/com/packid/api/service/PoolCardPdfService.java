@@ -50,9 +50,6 @@ public class PoolCardPdfService {
         AppUser user = authenticatedUserService.requireAppUser(principal);
         accessControlService.requirePoolCardViewer(user);
         PoolCard card = poolCardService.require(user.getTenantId(), id);
-        if (card.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha ainda não foi validada pela administração.");
-        }
         if (card.getValidUntil() == null || card.getValidUntil().isBefore(LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha está vencida.");
         }

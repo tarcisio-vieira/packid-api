@@ -158,9 +158,6 @@ public class ResidentPortalService {
                 || !same(resident.getApartment(), context.occupancy().getApartment())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta carteirinha não pertence à sua unidade.");
         }
-        if (card.getReviewStatus() != PoolCard.ReviewStatus.APPROVED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha ainda não foi validada pela administração.");
-        }
         if (card.getValidUntil() == null || card.getValidUntil().isBefore(java.time.LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A carteirinha está vencida.");
         }

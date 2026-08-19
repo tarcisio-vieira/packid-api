@@ -881,8 +881,8 @@ public class RegistryEntryService {
         PoolCard poolCard = entry.getEntryType() == EntryType.RESIDENT
                 ? poolCardRepository.findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(entry.getTenantId(), entry.getId()).orElse(null)
                 : null;
-        boolean poolCardValid = poolCard != null && poolCard.getReviewStatus() == PoolCard.ReviewStatus.APPROVED
-                && poolCard.getValidUntil() != null && !poolCard.getValidUntil().isBefore(java.time.LocalDate.now());
+        boolean poolCardValid = poolCard != null && poolCard.getValidUntil() != null
+                && !poolCard.getValidUntil().isBefore(java.time.LocalDate.now());
         return new RegistryEntryResponse(
                 entry.getId(),
                 entry.getPersonId(),

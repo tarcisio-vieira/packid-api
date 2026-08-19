@@ -35,6 +35,13 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
                and re.deleted = false
                and re.block is not null
                and re.apartment is not null
+               and not exists (
+                    select 1
+                      from PoolCard pc
+                     where pc.tenantId = re.tenantId
+                       and pc.residentRegistryEntryId = re.id
+                       and pc.deleted = false
+               )
                and (
                     :search = ''
                     or lower(coalesce(re.name, '')) like concat('%', :search, '%')

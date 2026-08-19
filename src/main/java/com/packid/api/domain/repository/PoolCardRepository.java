@@ -14,6 +14,7 @@ import java.util.UUID;
 
 public interface PoolCardRepository extends JpaRepository<PoolCard, UUID> {
     Optional<PoolCard> findByTenantIdAndIdAndDeletedFalse(UUID tenantId, UUID id);
+    boolean existsByTenantIdAndResidentRegistryEntryIdAndDeletedFalse(UUID tenantId, UUID residentRegistryEntryId);
     List<PoolCard> findAllByTenantIdAndDeletedFalseOrderByValidUntilDesc(UUID tenantId);
     List<PoolCard> findAllByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDesc(UUID tenantId, UUID residentRegistryEntryId);
     Optional<PoolCard> findFirstByTenantIdAndResidentRegistryEntryIdAndDeletedFalseOrderByIssueDateDescCreatedAtDesc(UUID tenantId, UUID residentRegistryEntryId);

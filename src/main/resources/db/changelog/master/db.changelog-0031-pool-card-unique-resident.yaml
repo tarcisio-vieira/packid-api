@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0031-pool-card-one-active-per-resident
+      author: openai
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: |
+              WITH ranked AS (
+                  SELECT id,
+                         ROW_NUMBER() OVER (
+                             PARTITION BY tenant_id, resident_registry_entry_id
+                             ORDER BY issue_date DESC, created_at DESC, id DESC
+                         ) AS rn
+                    FROM pool_card
+                   WHERE deleted = false
+              )
+              UPDATE pool_card pc
+                 SET deleted = true,
+                     deleted_at = CURRENT_TIMESTAMP,
+                     deleted_by = 'migration-0031-duplicate-pool-card'
+                FROM ranked r
+               WHERE pc.id = r.id
+                 AND r.rn > 1
+        - sql:
+            dbms: postgresql
+            sql: |
+              CREATE UNIQUE INDEX IF NOT EXISTS uq_pool_card_active_resident
+                  ON pool_card (tenant_id, resident_registry_entry_id)
+               WHERE deleted = false
