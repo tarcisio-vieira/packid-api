@@ -113,7 +113,7 @@ public class ResidentPortalService {
                         .map(r -> new PackIdRecentResponse(
                                 r.getId(), r.getBookPage(), r.getBlock(), r.getApartment(),
                                 r.getResidentFullName(), r.getPackageCode(), r.getLabelPackageCode(),
-                                r.getObservations(), r.getArrivedAt(), r.getResidentAcknowledgedAt(),
+                                r.getPackageType(), r.getObservations(), r.getArrivedAt(), r.getResidentAcknowledgedAt(),
                                 r.getHandedOverAt(), r.getCreatedBy()))
                         .toList(),
                 spaceAccessService.residentHistory(context),
@@ -173,7 +173,7 @@ public class ResidentPortalService {
         java.time.ZoneId zone = java.time.ZoneId.of("America/Sao_Paulo");
         return new PackIdRecentResponse(p.getId(), p.getBookPage(), block, apartment,
                 p.getPerson() == null ? null : p.getPerson().getFullName(), p.getPackageCode(), p.getLabelPackageCode(),
-                p.getObservations(), p.getArrivedAt() == null ? null : p.getArrivedAt().atZone(zone).toInstant(),
+                p.getPackageType() == null ? null : p.getPackageType().name(), p.getObservations(), p.getArrivedAt() == null ? null : p.getArrivedAt().atZone(zone).toInstant(),
                 p.getResidentAcknowledgedAt() == null ? null : p.getResidentAcknowledgedAt().atZone(zone).toInstant(),
                 p.getHandedOverAt() == null ? null : p.getHandedOverAt().atZone(zone).toInstant(), p.getCreatedBy());
     }

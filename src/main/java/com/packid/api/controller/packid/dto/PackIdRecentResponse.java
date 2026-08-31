@@ -11,6 +11,7 @@ public record PackIdRecentResponse(
         String residentFullName,
         String packageCode,
         String labelPackageCode,
+        String packageType,
         String observations,
         Instant arrivedAt,
         Instant residentAcknowledgedAt,

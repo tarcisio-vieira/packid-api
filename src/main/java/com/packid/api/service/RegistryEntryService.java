@@ -271,6 +271,7 @@ public class RegistryEntryService {
                                 r.getResidentFullName(),
                                 r.getPackageCode(),
                                 r.getLabelPackageCode(),
+                                r.getPackageType(),
                                 r.getObservations(),
                                 r.getArrivedAt(),
                                 r.getResidentAcknowledgedAt(),

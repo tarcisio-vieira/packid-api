@@ -57,10 +57,16 @@ public class UnitChangeEmailListener {
     @Async("mailTaskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onUnitChange(UnitChangeEmailEvent event) {
-        if (!emailNotificationsEnabled(event.tenantId())) return;
+        if (!isPackIdCancelled(event) && !emailNotificationsEnabled(event.tenantId())) return;
 
-        List<String> recipients = residentEmails(
-                event.tenantId(), event.block(), event.apartment(), event.recipients());
+        List<String> recipients;
+        if (isPackIdCancelled(event) && clean(event.referenceKey()) != null) {
+            recipients = logRepository.findSentRecipientsByReference(
+                    event.tenantId(), "PACKID_RECEIVED", event.referenceKey());
+        } else {
+            recipients = residentEmails(
+                    event.tenantId(), event.block(), event.apartment(), event.recipients());
+        }
         if (recipients.isEmpty()) return;
 
         TenantGoogleAccount account = googleAccountService.find(event.tenantId()).orElse(null);
@@ -117,12 +123,23 @@ public class UnitChangeEmailListener {
         item.setSenderEmail(sender);
         item.setSubject(limit(subject, 255));
         item.setChangeType(limit(event.changeType(), 60));
+        item.setReferenceKey(limit(event.referenceKey(), 100));
         item.setStatus("PENDING");
         item.setCreatedBy(limit(event.actor(), 150));
         return item;
     }
 
     private String plainBody(UnitChangeEmailEvent event, String condominiumName) {
+        if (isPackIdCancelled(event)) {
+            return "VSGI Condomínio\n\n"
+                    + "Olá,\n\n"
+                    + event.details() + "\n\n"
+                    + "Condomínio: " + condominiumName + "\n"
+                    + "Unidade: Bloco " + event.block() + " / Apartamento " + event.apartment() + "\n"
+                    + "Data/Hora do cancelamento: " + event.occurredAt().format(DATE_TIME) + "\n\n"
+                    + "Nenhuma ação é necessária. Esta mensagem serve apenas para corrigir o aviso anterior.\n\n"
+                    + "Esta é uma mensagem automática do VSGI Condomínio. Não responda a este e-mail.";
+        }
         if (isPackIdReceived(event)) {
             return "VSGI Condomínio\n\n"
                     + "Olá,\n\n"
@@ -148,6 +165,21 @@ public class UnitChangeEmailListener {
     }
 
     private String htmlBody(UnitChangeEmailEvent event, String condominiumName) {
+        if (isPackIdCancelled(event)) {
+            return "<div style=\"font-family:Arial,sans-serif;color:#222;line-height:1.5\">"
+                    + "<h2 style=\"margin-bottom:8px\">Correção de aviso de encomenda</h2>"
+                    + "<p>Olá,</p>"
+                    + "<p>" + HtmlUtils.htmlEscape(event.details()) + "</p>"
+                    + "<table style=\"border-collapse:collapse\">"
+                    + row("Condomínio", condominiumName)
+                    + row("Unidade", "Bloco " + event.block() + " / Apartamento " + event.apartment())
+                    + row("Data/Hora do cancelamento", event.occurredAt().format(DATE_TIME))
+                    + "</table>"
+                    + "<p style=\"margin-top:18px\"><strong>Nenhuma ação é necessária.</strong> Esta mensagem corrige o aviso anterior.</p>"
+                    + "<p style=\"margin-top:22px;color:#666;font-size:12px\">"
+                    + "Esta é uma mensagem automática do VSGI Condomínio. Não responda a este e-mail."
+                    + "</p></div>";
+        }
         if (isPackIdReceived(event)) {
             return "<div style=\"font-family:Arial,sans-serif;color:#222;line-height:1.5\">"
                     + "<h2 style=\"margin-bottom:8px\">VSGI Condomínio</h2>"
@@ -183,6 +215,10 @@ public class UnitChangeEmailListener {
 
     private boolean isPackIdReceived(UnitChangeEmailEvent event) {
         return "PACKID_RECEIVED".equalsIgnoreCase(event.changeType());
+    }
+
+    private boolean isPackIdCancelled(UnitChangeEmailEvent event) {
+        return "PACKID_CANCELLED".equalsIgnoreCase(event.changeType());
     }
 
     private String row(String label, String value) {

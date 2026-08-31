@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0032-packid-cancel-notification
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: email_notification_log
+            columns:
+              - column:
+                  name: reference_key
+                  type: varchar(100)
+        - createIndex:
+            tableName: email_notification_log
+            indexName: idx_email_notification_log_reference
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: change_type
+              - column:
+                  name: reference_key
+              - column:
+                  name: status

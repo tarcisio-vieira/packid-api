@@ -95,13 +95,28 @@ public class PackIdController {
             @AuthenticationPrincipal OidcUser user,
             @RequestParam(defaultValue = "500") int limit,
             @RequestParam(required = false) Instant from,
-            @RequestParam(required = false) Instant to
+            @RequestParam(required = false) Instant to,
+            @RequestParam(required = false) String block,
+            @RequestParam(required = false) String apartment,
+            @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.getRecentForMe(user, limit, from, to));
+        return ResponseEntity.ok(service.getRecentForMe(user, limit, from, to, block, apartment, search));
     }
     @GetMapping("/pickup-requests")
     public ResponseEntity<List<PackIdPickupRequestResponse>> pickupRequests(@AuthenticationPrincipal OidcUser user) {
         return ResponseEntity.ok(service.pendingPickupRequests(user));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Void> cancel(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
+        service.cancel(user, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/pickup-requests/clear")
+    public ResponseEntity<java.util.Map<String, Integer>> clearPickupRequests(@AuthenticationPrincipal OidcUser user) {
+        int cleared = service.clearPendingPickupRequests(user);
+        return ResponseEntity.ok(java.util.Map.of("cleared", cleared));
     }
 
     @PostMapping("/{id}/hand-over")

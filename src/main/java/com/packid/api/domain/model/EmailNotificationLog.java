@@ -37,6 +37,9 @@ public class EmailNotificationLog extends AuditableEntity {
     @Column(name = "change_type", nullable = false, length = 60)
     private String changeType;
 
+    @Column(name = "reference_key", length = 100)
+    private String referenceKey;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 

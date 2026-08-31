@@ -10,6 +10,7 @@ public record UnitChangeEmailEvent(
         String apartment,
         List<String> recipients,
         String changeType,
+        String referenceKey,
         String title,
         String details,
         String actor,

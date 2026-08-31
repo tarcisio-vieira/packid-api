@@ -27,6 +27,20 @@ public class UnitChangeNotificationPublisher {
             String details,
             String actor
     ) {
+        publishReferenced(tenantId, block, apartment, extraRecipients, changeType, null, title, details, actor);
+    }
+
+    public void publishReferenced(
+            UUID tenantId,
+            String block,
+            String apartment,
+            Collection<String> extraRecipients,
+            String changeType,
+            String referenceKey,
+            String title,
+            String details,
+            String actor
+    ) {
         String cleanedBlock = clean(block);
         String cleanedApartment = clean(apartment);
         if (tenantId == null || cleanedBlock == null || cleanedApartment == null) return;
@@ -37,6 +51,7 @@ public class UnitChangeNotificationPublisher {
                 cleanedApartment,
                 extraRecipients == null ? List.of() : List.copyOf(extraRecipients),
                 clean(changeType) == null ? "UNIT_CHANGE" : changeType.trim(),
+                clean(referenceKey),
                 clean(title) == null ? "Alteração na unidade" : title.trim(),
                 clean(details) == null ? "Foi realizada uma alteração nos dados da unidade." : details.trim(),
                 clean(actor) == null ? "sistema" : actor.trim(),

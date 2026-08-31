@@ -13,5 +13,6 @@ public record PackIdLabelCreateRequest(
         String block,
         @NotBlank
         @Pattern(regexp = "(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})", message = "Página inválida. Informe uma página entre 001 e 999.")
-        String bookPage
+        String bookPage,
+        Boolean letter
 ) {}

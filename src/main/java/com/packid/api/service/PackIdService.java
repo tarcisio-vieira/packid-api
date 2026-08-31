@@ -204,7 +204,7 @@ public class PackIdService {
         p.setPersonId(resident.getId());
         p.setRegisteredByUserId(appUser.getId());
 
-        p.setPackageType(PackageType.PACKAGE);
+        p.setPackageType(Boolean.TRUE.equals(req.letter()) ? PackageType.LETTER : PackageType.PACKAGE);
         p.setPackageCode(packageCode);
         p.setLabelPackageCode(packageCode);
         p.setBookPage(bookPage);
@@ -246,12 +246,13 @@ public class PackIdService {
             details.append(" Página: ").append(packId.getBookPage()).append('.');
         }
 
-        unitChangeNotificationPublisher.publish(
+        unitChangeNotificationPublisher.publishReferenced(
                 packId.getTenantId(),
                 block,
                 apartment,
                 List.of(),
                 "PACKID_RECEIVED",
+                packId.getId().toString(),
                 "Encomenda recebida",
                 details.toString(),
                 actor
@@ -354,16 +355,104 @@ public class PackIdService {
     }
 
     @Transactional
-    public List<PackIdRecentResponse> getRecentForMe(OidcUser oidcUser, int limit, Instant from, Instant to) {
+    public void cancel(OidcUser oidcUser, UUID id) {
+        if (oidcUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário não autenticado");
+        }
+        AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
+        accessControlService.requireOperationalUser(appUser);
+
+        PackId p = repository.findByTenantIdAndIdAndDeletedFalse(appUser.getTenantId(), id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Encomenda não encontrada."));
+        if (p.getHandedOverAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Uma encomenda já entregue não pode ser cancelada. Corrija o histórico pela administração, se necessário.");
+        }
+
+        String actor = cleanOptional(appUser.getEmail()) == null ? "sistema" : appUser.getEmail().trim();
+        String block = cleanOptional(p.getBuildingBlock());
+        String apartment = cleanOptional(p.getApartment());
+        if ((block == null || apartment == null) && p.getResidentialUnit() != null) {
+            if (block == null) block = cleanOptional(p.getResidentialUnit().getBlock());
+            if (apartment == null) apartment = cleanOptional(p.getResidentialUnit().getApartment());
+        }
+        String code = cleanOptional(p.getLabelPackageCode());
+        if (code == null) code = cleanOptional(p.getPackageCode());
+        if (code == null) code = p.getId().toString();
+
+        p.setDeleted(true);
+        p.setDeletedAt(LocalDateTime.now());
+        p.setDeletedBy(actor);
+        p.setUpdatedBy(actor);
+        repository.save(p);
+
+        if (block != null && apartment != null) {
+            String details = "Identificamos que o registro da encomenda de código " + code
+                    + " foi cancelado por um erro de identificação no momento do recebimento. "
+                    + "Por favor, desconsidere o e-mail anterior que informava o recebimento dessa encomenda. "
+                    + "O registro incorreto já foi removido dos históricos do condomínio.";
+            unitChangeNotificationPublisher.publishReferenced(
+                    p.getTenantId(), block, apartment, List.of(),
+                    "PACKID_CANCELLED", p.getId().toString(),
+                    "Correção: desconsidere o aviso da encomenda " + code,
+                    details, actor);
+        }
+    }
+
+    @Transactional
+    public int clearPendingPickupRequests(OidcUser oidcUser) {
+        if (oidcUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário não autenticado");
+        }
+        AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
+        accessControlService.requireOperationalUser(appUser);
+        String actor = cleanOptional(appUser.getEmail()) == null ? "sistema" : appUser.getEmail().trim();
+        List<PackId> pending = repository
+                .findAllByTenantIdAndDeletedFalseAndResidentAcknowledgedAtIsNotNullAndHandedOverAtIsNull(appUser.getTenantId());
+        pending.forEach(item -> {
+            item.setResidentAcknowledgedAt(null);
+            item.setUpdatedBy(actor);
+        });
+        repository.saveAll(pending);
+        return pending.size();
+    }
+
+    @Transactional
+    public List<PackIdRecentResponse> getRecentForMe(
+            OidcUser oidcUser,
+            int limit,
+            Instant from,
+            Instant to,
+            String block,
+            String apartment,
+            String search
+    ) {
         AppUser appUser = resolveAppUser(oidcUser.getEmail(), oidcUser.getSubject());
         UUID tenantId = appUser.getTenantId();
-
-        int safeLimit = Math.min(Math.max(limit, 1), 200);
 
         java.sql.Timestamp fromTs = (from == null) ? null : java.sql.Timestamp.from(from);
         java.sql.Timestamp toTs = (to == null) ? null : java.sql.Timestamp.from(to);
 
-        return repository.findRecentByTenant(tenantId, safeLimit, fromTs, toTs).stream()
+        boolean unitSearch = block != null && !block.isBlank()
+                && apartment != null && !apartment.isBlank();
+        boolean textSearch = !unitSearch && search != null && !search.isBlank();
+
+        int safeLimit = unitSearch
+                ? Math.min(Math.max(limit, 1), 500)
+                : Math.min(Math.max(limit, 1), 200);
+
+        List<PackIdRepository.PackIdRecentRow> rows;
+        if (unitSearch) {
+            rows = repository.findByUnit(tenantId, block.trim(), apartment.trim(), fromTs, toTs, safeLimit);
+        } else if (textSearch) {
+            // Filtra no banco antes do LIMIT. Assim códigos antigos continuam
+            // pesquisáveis mesmo quando existem mais de 200 encomendas recentes.
+            rows = repository.findRecentByTenantSearch(tenantId, search.trim(), safeLimit, fromTs, toTs);
+        } else {
+            rows = repository.findRecentByTenant(tenantId, safeLimit, fromTs, toTs);
+        }
+
+        return rows.stream()
                 .map(r -> new PackIdRecentResponse(
                         r.getId(),
                         r.getBookPage(),
@@ -372,6 +461,7 @@ public class PackIdService {
                         r.getResidentFullName(),
                         r.getPackageCode(),
                         r.getLabelPackageCode(),
+                        r.getPackageType(),
                         r.getObservations(),
                         r.getArrivedAt(),
                         r.getResidentAcknowledgedAt(),
@@ -421,7 +511,7 @@ public class PackIdService {
         String resident = p.getPerson() == null ? null : p.getPerson().getFullName();
         java.time.ZoneId zone = java.time.ZoneId.of("America/Sao_Paulo");
         return new PackIdRecentResponse(p.getId(), p.getBookPage(), block, apartment, resident,
-                p.getPackageCode(), p.getLabelPackageCode(), p.getObservations(),
+                p.getPackageCode(), p.getLabelPackageCode(), p.getPackageType() == null ? null : p.getPackageType().name(), p.getObservations(),
                 p.getArrivedAt() == null ? null : p.getArrivedAt().atZone(zone).toInstant(),
                 p.getResidentAcknowledgedAt() == null ? null : p.getResidentAcknowledgedAt().atZone(zone).toInstant(),
                 p.getHandedOverAt() == null ? null : p.getHandedOverAt().atZone(zone).toInstant(), p.getCreatedBy());

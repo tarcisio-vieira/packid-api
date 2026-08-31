@@ -63,6 +63,8 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
 
         String getLabelPackageCode();
 
+        String getPackageType();
+
         String getObservations();
 
         Instant getArrivedAt();
@@ -94,6 +96,7 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,
               p.label_package_code AS labelPackageCode,
+              p.package_type AS packageType,
               p.observations AS observations,
               p.arrived_at AS arrivedAt,
               p.resident_acknowledged_at AS residentAcknowledgedAt,
@@ -119,6 +122,7 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
             @Param("fromTs") java.sql.Timestamp fromTs,
             @Param("toTs") java.sql.Timestamp toTs
     );
+
     @Query(value = """
             SELECT
               p.id AS id,
@@ -139,6 +143,58 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,
               p.label_package_code AS labelPackageCode,
+              p.package_type AS packageType,
+              p.observations AS observations,
+              p.arrived_at AS arrivedAt,
+              p.resident_acknowledged_at AS residentAcknowledgedAt,
+              p.handed_over_at AS handedOverAt,
+              p.created_by AS createdBy
+            FROM public.pack_id p
+            JOIN public.residential_unit ru
+              ON ru.tenant_id = p.tenant_id
+             AND ru.id = p.residential_unit_id
+            LEFT JOIN public.person pe
+              ON pe.tenant_id = p.tenant_id
+             AND pe.id = p.person_id
+            WHERE p.tenant_id = :tenantId
+              AND p.deleted = false
+              AND p.arrived_at >= COALESCE(CAST(:fromTs AS timestamp), '-infinity'::timestamp)
+              AND p.arrived_at <  COALESCE(CAST(:toTs   AS timestamp), 'infinity'::timestamp)
+              AND (
+                    LOWER(COALESCE(p.label_package_code, '')) LIKE LOWER(CONCAT('%', TRIM(:search), '%'))
+                    OR LOWER(COALESCE(p.package_code, '')) LIKE LOWER(CONCAT('%', TRIM(:search), '%'))
+                  )
+            ORDER BY p.arrived_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<PackIdRecentRow> findRecentByTenantSearch(
+            @Param("tenantId") UUID tenantId,
+            @Param("search") String search,
+            @Param("limit") int limit,
+            @Param("fromTs") java.sql.Timestamp fromTs,
+            @Param("toTs") java.sql.Timestamp toTs
+    );
+    @Query(value = """
+            SELECT
+              p.id AS id,
+              COALESCE(
+                p.book_page,
+                CASE WHEN p.building_block ~ '^[0-9]{3}$' THEN p.building_block ELSE NULL END
+              ) AS bookPage,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.building_block
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 1 FOR 1)
+                ELSE p.building_block
+              END AS block,
+              CASE
+                WHEN p.apartment IS NOT NULL THEN p.apartment
+                WHEN p.building_block ~ '^[0-9]{3}$' AND ru.code ~ '^[1-4][0-9]{3,4}$' THEN SUBSTRING(ru.code FROM 2)
+                ELSE ru.code
+              END AS apartment,
+              pe.full_name AS residentFullName,
+              p.package_code AS packageCode,
+              p.label_package_code AS labelPackageCode,
+              p.package_type AS packageType,
               p.observations AS observations,
               p.arrived_at AS arrivedAt,
               p.resident_acknowledged_at AS residentAcknowledgedAt,
@@ -203,6 +259,7 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
               pe.full_name AS residentFullName,
               p.package_code AS packageCode,
               p.label_package_code AS labelPackageCode,
+              p.package_type AS packageType,
               p.observations AS observations,
               p.arrived_at AS arrivedAt,
               p.resident_acknowledged_at AS residentAcknowledgedAt,
@@ -218,5 +275,7 @@ public interface PackIdRepository extends JpaRepository<PackId, UUID> {
             ORDER BY p.resident_acknowledged_at ASC
             """, nativeQuery = true)
     List<PackIdRecentRow> findPendingPickupRequests(@Param("tenantId") UUID tenantId);
+
+    List<PackId> findAllByTenantIdAndDeletedFalseAndResidentAcknowledgedAtIsNotNullAndHandedOverAtIsNull(UUID tenantId);
 
 }
