@@ -1,10 +1,13 @@
 package com.packid.api.controller.space;
 
+import com.packid.api.controller.space.dto.SpaceAccessCompleteRequest;
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
 import com.packid.api.controller.space.dto.SpaceAccessPageResponse;
+import com.packid.api.controller.space.dto.SpaceManualReleaseRequest;
 import com.packid.api.controller.space.dto.SpaceRegularizationResponse;
 import com.packid.api.domain.model.SpaceAccessRequest;
 import com.packid.api.service.SpaceAccessService;
+import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -55,9 +58,21 @@ public class SpaceAccessController {
         return service.release(user, id);
     }
 
+    @PostMapping("/manual-release")
+    public SpaceAccessResponse manualRelease(
+            @AuthenticationPrincipal OidcUser user,
+            @Valid @RequestBody SpaceManualReleaseRequest request
+    ) {
+        return service.manualRelease(user, request);
+    }
+
     @PostMapping("/{id}/complete")
-    public SpaceAccessResponse complete(@AuthenticationPrincipal OidcUser user, @PathVariable UUID id) {
-        return service.complete(user, id);
+    public SpaceAccessResponse complete(
+            @AuthenticationPrincipal OidcUser user,
+            @PathVariable UUID id,
+            @RequestBody(required = false) SpaceAccessCompleteRequest request
+    ) {
+        return service.complete(user, id, request == null ? null : request.completedAt());
     }
 
     @PostMapping("/{id}/regularize")

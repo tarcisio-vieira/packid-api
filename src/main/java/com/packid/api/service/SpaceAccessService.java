@@ -2,10 +2,13 @@ package com.packid.api.service;
 
 import com.packid.api.controller.space.dto.SpaceAccessResponse;
 import com.packid.api.controller.space.dto.SpaceAccessPageResponse;
+import com.packid.api.controller.space.dto.SpaceManualReleaseRequest;
 import com.packid.api.controller.space.dto.SpaceKeyAvailabilityResponse;
+import com.packid.api.domain.model.ApartmentOccupancy;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.RegistryEntry;
 import com.packid.api.domain.model.SpaceAccessRequest;
+import com.packid.api.domain.repository.ApartmentOccupancyRepository;
 import com.packid.api.domain.repository.RegistryEntryRepository;
 import com.packid.api.domain.repository.SpaceAccessRequestRepository;
 import jakarta.transaction.Transactional;
@@ -41,17 +44,20 @@ public class SpaceAccessService {
 
     private final SpaceAccessRequestRepository repository;
     private final RegistryEntryRepository registryEntryRepository;
+    private final ApartmentOccupancyRepository occupancyRepository;
     private final AuthenticatedUserService authenticatedUserService;
     private final AccessControlService accessControlService;
 
     public SpaceAccessService(
             SpaceAccessRequestRepository repository,
             RegistryEntryRepository registryEntryRepository,
+            ApartmentOccupancyRepository occupancyRepository,
             AuthenticatedUserService authenticatedUserService,
             AccessControlService accessControlService
     ) {
         this.repository = repository;
         this.registryEntryRepository = registryEntryRepository;
+        this.occupancyRepository = occupancyRepository;
         this.authenticatedUserService = authenticatedUserService;
         this.accessControlService = accessControlService;
     }
@@ -117,23 +123,87 @@ public class SpaceAccessService {
                     keyAlreadyWithUnitMessage(holder));
         }
 
-        request.setStatus(SpaceAccessRequest.Status.IN_USE);
-        request.setReleasedAt(LocalDateTime.now());
-        request.setReleasedBy(actor(user));
-        request.setUpdatedBy(actor(user));
+        releaseRequest(request, user, LocalDateTime.now());
         return toResponse(repository.save(request), user.getTenantId());
     }
 
     @Transactional
-    public SpaceAccessResponse complete(OidcUser oidcUser, UUID id) {
+    public SpaceAccessResponse manualRelease(OidcUser oidcUser, SpaceManualReleaseRequest input) {
+        AppUser user = operationalUser(oidcUser);
+        RegistryEntry resident = registryEntryRepository
+                .findByTenantIdAndIdAndDeletedFalse(user.getTenantId(), input.residentRegistryEntryId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Condômino não encontrado."));
+
+        if (resident.getEntryType() != RegistryEntry.EntryType.RESIDENT || !Boolean.TRUE.equals(resident.getActive())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Selecione um condômino ativo para liberar a chave.");
+        }
+
+        ApartmentOccupancy occupancy = activeOccupancyForResident(user.getTenantId(), resident);
+        UUID occupancyId = occupancy.getId();
+        String block = requiredUnit(occupancy.getBlock(), "Bloco não definido para a ocupação.");
+        String apartment = requiredUnit(occupancy.getApartment(), "Apartamento não definido para a ocupação.");
+
+        SpaceAccessRequest current = repository
+                .findFirstByTenantIdAndOccupancyIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtDesc(
+                        user.getTenantId(), occupancyId, input.spaceType(), ACTIVE_STATUSES)
+                .or(() -> repository.findFirstByTenantIdAndResidentRegistryEntryIdAndSpaceTypeAndStatusInAndDeletedFalseOrderByRequestedAtDesc(
+                        user.getTenantId(), resident.getId(), input.spaceType(), ACTIVE_STATUSES))
+                .orElse(null);
+
+        LocalDateTime releaseAt = input.releasedAt() == null ? LocalDateTime.now() : input.releasedAt();
+        if (current != null) {
+            if (current.getStatus() == SpaceAccessRequest.Status.REQUESTED_PICKUP) {
+                SpaceAccessRequest holder = currentKeyHolder(user.getTenantId(), current.getSpaceType());
+                if (holder != null && !holder.getId().equals(current.getId())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, keyAlreadyWithUnitMessage(holder));
+                }
+                releaseRequest(current, user, releaseAt);
+                current.setNotes(appendNote(current.getNotes(),
+                        "Chave liberada diretamente por " + actor(user) + " em " + AUDIT_DATE_TIME.format(releaseAt) + "."));
+                return toResponse(repository.save(current), user.getTenantId());
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Já existe um registro ativo de " + spaceLabel(input.spaceType()) + " para " + unitLabel(current) + ".");
+        }
+
+        SpaceAccessRequest holder = currentKeyHolder(user.getTenantId(), input.spaceType());
+        if (holder != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, keyAlreadyWithUnitMessage(holder));
+        }
+
+        SpaceAccessRequest request = new SpaceAccessRequest();
+        request.setTenantId(user.getTenantId());
+        request.setResidentRegistryEntryId(resident.getId());
+        request.setOccupancyId(occupancyId);
+        request.setBlock(block);
+        request.setApartment(apartment);
+        request.setSpaceType(input.spaceType());
+        request.setStatus(SpaceAccessRequest.Status.IN_USE);
+        request.setRequestedAt(releaseAt);
+        request.setReleasedAt(releaseAt);
+        request.setReleasedBy(actor(user));
+        request.setCreatedBy(actor(user));
+        request.setUpdatedBy(actor(user));
+        request.setNotes("Chave liberada diretamente por " + actor(user) + " para " + resident.getName() + ".");
+        return toResponse(repository.save(request), user.getTenantId());
+    }
+
+    @Transactional
+    public SpaceAccessResponse complete(OidcUser oidcUser, UUID id, LocalDateTime completedAt) {
         AppUser user = operationalUser(oidcUser);
         SpaceAccessRequest request = requireRequest(user.getTenantId(), id);
-        if (request.getStatus() != SpaceAccessRequest.Status.REQUESTED_RETURN) {
+        if (request.getStatus() != SpaceAccessRequest.Status.IN_USE
+                && request.getStatus() != SpaceAccessRequest.Status.REQUESTED_RETURN) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A devolução só pode ser concluída após o morador solicitar a entrega da chave.");
+                    "A chave só pode ser marcada como entregue quando estiver em uso ou aguardando devolução.");
+        }
+        LocalDateTime effectiveCompletedAt = completedAt == null ? LocalDateTime.now() : completedAt;
+        if (request.getReleasedAt() != null && effectiveCompletedAt.isBefore(request.getReleasedAt())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A data da entrega não pode ser anterior à data de liberação da chave.");
         }
         request.setStatus(SpaceAccessRequest.Status.COMPLETED);
-        request.setCompletedAt(LocalDateTime.now());
+        request.setCompletedAt(effectiveCompletedAt);
         request.setCompletedBy(actor(user));
         request.setUpdatedBy(actor(user));
         return toResponse(repository.save(request), user.getTenantId());
@@ -167,6 +237,41 @@ public class SpaceAccessService {
         request.setUpdatedBy(actor(user));
         request.setNotes(appendNote(request.getNotes(),
                 "Pendência de chave regularizada manualmente por " + actor(user) + " em " + AUDIT_DATE_TIME.format(now) + "."));
+    }
+
+    private void releaseRequest(SpaceAccessRequest request, AppUser user, LocalDateTime releasedAt) {
+        request.setStatus(SpaceAccessRequest.Status.IN_USE);
+        request.setReleasedAt(releasedAt);
+        request.setReleasedBy(actor(user));
+        request.setUpdatedBy(actor(user));
+    }
+
+    private ApartmentOccupancy activeOccupancyForResident(UUID tenantId, RegistryEntry resident) {
+        if (resident.getOccupancyId() != null) {
+            ApartmentOccupancy occupancy = occupancyRepository
+                    .findByTenantIdAndIdAndDeletedFalse(tenantId, resident.getOccupancyId())
+                    .orElse(null);
+            if (occupancy != null && occupancy.getStatus() == ApartmentOccupancy.Status.ACTIVE) {
+                return occupancy;
+            }
+        }
+
+        String block = requiredUnit(resident.getBlock(), "Bloco não definido para o condômino.");
+        String apartment = requiredUnit(resident.getApartment(), "Apartamento não definido para o condômino.");
+        return occupancyRepository
+                .findFirstByTenantIdAndBlockIgnoreCaseAndApartmentIgnoreCaseAndStatusAndDeletedFalse(
+                        tenantId, block, apartment, ApartmentOccupancy.Status.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Não foi encontrada uma ocupação ativa para Bloco " + block + " Apto " + apartment + "."));
+    }
+
+    private String spaceLabel(SpaceAccessRequest.SpaceType type) {
+        return switch (type) {
+            case GYM -> "Academia";
+            case GAMES_ROOM -> "Sala de Jogos";
+            case SAUNA -> "Sauna";
+            case PLAYROOM -> "Brinquedoteca";
+        };
     }
 
     public SpaceKeyAvailabilityResponse residentAvailability(
