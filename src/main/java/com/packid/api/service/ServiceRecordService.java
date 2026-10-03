@@ -1,5 +1,6 @@
 package com.packid.api.service;
 
+import com.packid.api.controller.servicerecord.dto.ServiceRecordFinishRequest;
 import com.packid.api.controller.servicerecord.dto.ServiceRecordRequest;
 import com.packid.api.controller.servicerecord.dto.ServiceRecordResponse;
 import com.packid.api.domain.model.*;
@@ -36,7 +37,10 @@ public class ServiceRecordService {
         AppUser appUser = authenticatedUserService.requireAppUser(user);
         RegistryEntry provider = requireProvider(appUser.getTenantId(), request.serviceProviderRegistryEntryId());
         if (!Boolean.TRUE.equals(provider.getActive())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O prestador está inativo. Reative o cadastro antes de registrar um serviço.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O prestador está inativo. Reative o cadastro antes de iniciar um serviço.");
+        }
+        if (repository.existsByTenantIdAndServiceProviderRegistryEntryIdAndCompletedAtIsNullAndDeletedFalse(appUser.getTenantId(), provider.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este prestador já possui um serviço iniciado. Finalize o serviço atual antes de iniciar outro.");
         }
 
         ServiceRecord record = new ServiceRecord();
@@ -68,9 +72,38 @@ public class ServiceRecordService {
         } else if (scope != null) {
             records = repository.findAllByTenantIdAndServiceScopeAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId(), scope);
         } else {
-            records = repository.findAllByTenantIdAndServiceScopeAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId(), ServiceRecord.ServiceScope.CONDOMINIUM);
+            records = repository.findAllByTenantIdAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId());
         }
         return records.stream().map(item -> toResponse(item, item.getServiceProvider(), item.getServiceCompany())).toList();
+    }
+
+
+    @Transactional(readOnly = true)
+    public List<ServiceRecordResponse> getActive(OidcUser user) {
+        AppUser appUser = authenticatedUserService.requireAppUser(user);
+        return repository.findAllByTenantIdAndCompletedAtIsNullAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId())
+                .stream().map(item -> toResponse(item, item.getServiceProvider(), item.getServiceCompany())).toList();
+    }
+
+    @Transactional
+    public ServiceRecordResponse finish(OidcUser user, UUID id, ServiceRecordFinishRequest request) {
+        AppUser appUser = authenticatedUserService.requireAppUser(user);
+        ServiceRecord record = repository.findById(id)
+                .filter(item -> item.getTenantId().equals(appUser.getTenantId()) && !Boolean.TRUE.equals(item.getDeleted()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registro de serviço não encontrado."));
+        if (record.getCompletedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este serviço já foi finalizado.");
+        }
+        LocalDateTime completedAt = request == null || request.completedAt() == null ? LocalDateTime.now() : request.completedAt();
+        if (completedAt.isBefore(record.getPerformedAt())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A saída não pode ser anterior ao início do serviço.");
+        }
+        String actor = actor(appUser);
+        record.setCompletedAt(completedAt);
+        record.setCompletedBy(actor);
+        record.setUpdatedBy(actor);
+        ServiceRecord saved = repository.save(record);
+        return toResponse(saved, saved.getServiceProvider(), saved.getServiceCompany());
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +138,8 @@ public class ServiceRecordService {
     private ServiceRecordResponse toResponse(ServiceRecord s, RegistryEntry provider, ServiceCompany company) {
         return new ServiceRecordResponse(s.getId(), s.getServiceProviderRegistryEntryId(), provider == null ? null : provider.getName(),
                 s.getServiceCompanyId(), company == null ? null : company.getName(), s.getServiceScope(), s.getBlock(), s.getApartment(),
-                s.getPerformedAt(), s.getServiceDescription(), s.getNotes(), s.getCreatedBy());
+                s.getPerformedAt(), s.getCompletedAt(), s.getCompletedAt() == null ? "STARTED" : "FINISHED",
+                s.getServiceDescription(), s.getNotes(), s.getCreatedBy());
     }
 
     private String actor(AppUser user) { return clean(user.getEmail()) == null ? "system" : user.getEmail().trim(); }

@@ -282,6 +282,8 @@ public class ManagementExportService {
             case GAMES_ROOM -> "Sala de Jogos";
             case GYM -> "Academia";
             case SAUNA -> "Sauna";
+            case MALE_BATHROOM -> "Banheiro Masculino";
+            case FEMALE_BATHROOM -> "Banheiro Feminino";
         };
     }
 

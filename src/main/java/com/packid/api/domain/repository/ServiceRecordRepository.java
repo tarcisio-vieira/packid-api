@@ -15,6 +15,9 @@ import java.util.UUID;
 public interface ServiceRecordRepository extends JpaRepository<ServiceRecord, UUID> {
     List<ServiceRecord> findAllByTenantIdAndServiceProviderRegistryEntryIdAndDeletedFalseOrderByPerformedAtDesc(UUID tenantId, UUID providerId);
     List<ServiceRecord> findAllByTenantIdAndServiceScopeAndDeletedFalseOrderByPerformedAtDesc(UUID tenantId, ServiceScope scope);
+    List<ServiceRecord> findAllByTenantIdAndDeletedFalseOrderByPerformedAtDesc(UUID tenantId);
+    List<ServiceRecord> findAllByTenantIdAndCompletedAtIsNullAndDeletedFalseOrderByPerformedAtDesc(UUID tenantId);
+    boolean existsByTenantIdAndServiceProviderRegistryEntryIdAndCompletedAtIsNullAndDeletedFalse(UUID tenantId, UUID providerId);
 
     @Query("""
             select s from ServiceRecord s

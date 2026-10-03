@@ -62,7 +62,9 @@ public class SpaceAccessRequest extends AuditableEntity {
         PLAYROOM,
         GAMES_ROOM,
         GYM,
-        SAUNA
+        SAUNA,
+        MALE_BATHROOM,
+        FEMALE_BATHROOM
     }
 
     public enum Status {

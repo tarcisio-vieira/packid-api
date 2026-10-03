@@ -270,6 +270,8 @@ public class SpaceAccessService {
             case GYM -> "Academia";
             case GAMES_ROOM -> "Sala de Jogos";
             case SAUNA -> "Sauna";
+            case MALE_BATHROOM -> "Banheiro Masculino";
+            case FEMALE_BATHROOM -> "Banheiro Feminino";
             case PLAYROOM -> "Brinquedoteca";
         };
     }

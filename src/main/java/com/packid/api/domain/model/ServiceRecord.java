@@ -46,6 +46,12 @@ public class ServiceRecord extends AuditableEntity {
     @Column(name = "service_description", nullable = false, length = 500)
     private String serviceDescription;
 
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Column(name = "completed_by", length = 150)
+    private String completedBy;
+
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
 

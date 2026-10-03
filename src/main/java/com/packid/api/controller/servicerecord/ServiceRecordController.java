@@ -1,5 +1,6 @@
 package com.packid.api.controller.servicerecord;
 
+import com.packid.api.controller.servicerecord.dto.ServiceRecordFinishRequest;
 import com.packid.api.controller.servicerecord.dto.ServiceRecordRequest;
 import com.packid.api.controller.servicerecord.dto.ServiceRecordResponse;
 import com.packid.api.domain.model.ServiceRecord.ServiceScope;
@@ -24,6 +25,18 @@ public class ServiceRecordController {
     public ResponseEntity<ServiceRecordResponse> create(@AuthenticationPrincipal OidcUser user, @Valid @RequestBody ServiceRecordRequest request) {
         ServiceRecordResponse created = service.create(user, request);
         return ResponseEntity.created(URI.create("/api/service-records/" + created.id())).body(created);
+    }
+
+    @GetMapping("/active")
+    public ResponseEntity<List<ServiceRecordResponse>> getActive(@AuthenticationPrincipal OidcUser user) {
+        return ResponseEntity.ok(service.getActive(user));
+    }
+
+    @PatchMapping("/{id}/finish")
+    public ResponseEntity<ServiceRecordResponse> finish(@AuthenticationPrincipal OidcUser user,
+                                                         @PathVariable UUID id,
+                                                         @RequestBody(required = false) ServiceRecordFinishRequest request) {
+        return ResponseEntity.ok(service.finish(user, id, request));
     }
 
     @GetMapping

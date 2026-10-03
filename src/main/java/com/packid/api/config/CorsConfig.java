@@ -27,7 +27,7 @@ public class CorsConfig {
         config.setAllowedOrigins(List.of(extractOrigin(frontendUrl)));
 
         // métodos permitidos (inclui OPTIONS pro preflight)
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
         // headers permitidos
         config.setAllowedHeaders(List.of(

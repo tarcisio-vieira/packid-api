@@ -15,6 +15,8 @@ public record ServiceRecordResponse(
         String block,
         String apartment,
         LocalDateTime performedAt,
+        LocalDateTime completedAt,
+        String status,
         String serviceDescription,
         String notes,
         String createdBy

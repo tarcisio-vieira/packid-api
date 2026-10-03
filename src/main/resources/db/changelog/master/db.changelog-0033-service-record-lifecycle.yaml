@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0033-service-record-lifecycle
+      author: vsgi
+      changes:
+        - addColumn:
+            tableName: service_record
+            columns:
+              - column: { name: completed_at, type: timestamp }
+              - column: { name: completed_by, type: varchar(150) }
+        - sql:
+            sql: UPDATE service_record SET completed_at = performed_at, completed_by = COALESCE(created_by, 'system') WHERE completed_at IS NULL
+        - createIndex:
+            tableName: service_record
+            indexName: idx_service_record_active
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: completed_at }
+              - column: { name: performed_at }
