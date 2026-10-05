@@ -21,6 +21,9 @@ public interface RegistryEntryRepository extends JpaRepository<RegistryEntry, UU
     Optional<RegistryEntry> findByTenantIdAndEntryTypeAndResidentUsernameIgnoreCaseAndActiveTrueAndDeletedFalse(
             UUID tenantId, EntryType entryType, String residentUsername);
 
+    List<RegistryEntry> findAllByEntryTypeAndResidentUsernameIgnoreCaseAndActiveTrueAndDeletedFalse(
+            EntryType entryType, String residentUsername);
+
     Optional<RegistryEntry> findByTenantIdAndResidentUsernameIgnoreCaseAndDeletedFalse(
             UUID tenantId, String residentUsername);
     List<RegistryEntry> findAllByTenantIdAndDeletedFalseOrderByNameAsc(UUID tenantId);

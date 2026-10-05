@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class ResidentSessionService {
     private static final String SESSION_TENANT_ID = "resident.tenantId";
     private static final String SESSION_OCCUPANCY_ID = "resident.occupancyId";
+    private static final String SESSION_RESIDENT_ENTRY_ID = "resident.registryEntryId";
 
     private final TenantRepository tenantRepository;
     private final ApartmentOccupancyRepository occupancyRepository;
@@ -43,31 +45,41 @@ public class ResidentSessionService {
     }
 
     public ResidentSessionResponse login(ResidentLoginRequest request, HttpSession session) {
-        String tenantSlug = cleanRequired(request.tenantSlug());
         String username = cleanRequired(request.username()).toLowerCase(Locale.ROOT);
-        String block = cleanRequired(request.block());
-        String apartment = cleanRequired(request.apartment());
+        String password = cleanRequired(request.password());
 
-        Tenant tenant = tenantRepository.findBySlugAndActiveTrue(tenantSlug)
-                .filter(item -> !Boolean.TRUE.equals(item.getDeleted()))
-                .orElseThrow(this::invalidLogin);
+        List<RegistryEntry> candidates = registryEntryRepository
+                .findAllByEntryTypeAndResidentUsernameIgnoreCaseAndActiveTrueAndDeletedFalse(
+                        RegistryEntry.EntryType.RESIDENT, username);
 
-        ApartmentOccupancy occupancy = occupancyRepository
-                .findByTenantIdAndResidentUsernameIgnoreCaseAndResidentAccessEnabledTrueAndStatusAndDeletedFalse(
-                        tenant.getId(), username, ApartmentOccupancy.Status.ACTIVE)
-                .orElseThrow(this::invalidLogin);
+        List<ResidentContext> matches = new ArrayList<>();
+        for (RegistryEntry resident : candidates) {
+            if (resident.getOccupancyId() == null || clean(resident.getResidentPasswordHash()) == null) continue;
+            if (!passwordEncoder.matches(password, resident.getResidentPasswordHash())) continue;
 
-        if (!same(occupancy.getBlock(), block)
-                || !same(occupancy.getApartment(), apartment)
-                || clean(occupancy.getResidentPasswordHash()) == null
-                || !passwordEncoder.matches(request.password(), occupancy.getResidentPasswordHash())) {
-            throw invalidLogin();
+            Tenant tenant = tenantRepository.findByIdAndDeletedFalse(resident.getTenantId())
+                    .filter(item -> Boolean.TRUE.equals(item.getActive()))
+                    .orElse(null);
+            if (tenant == null) continue;
+
+            ApartmentOccupancy occupancy = occupancyRepository
+                    .findByTenantIdAndIdAndDeletedFalse(tenant.getId(), resident.getOccupancyId())
+                    .filter(item -> item.getStatus() == ApartmentOccupancy.Status.ACTIVE)
+                    .orElse(null);
+            if (occupancy == null) continue;
+
+            matches.add(new ResidentContext(tenant, occupancy, resident));
         }
 
-        session.setAttribute(SESSION_TENANT_ID, tenant.getId().toString());
-        session.setAttribute(SESSION_OCCUPANCY_ID, occupancy.getId().toString());
+        // Usuário + senha precisam identificar uma única pessoa, independentemente do tenant.
+        if (matches.size() != 1) throw invalidLogin();
+
+        ResidentContext context = matches.get(0);
+        session.setAttribute(SESSION_TENANT_ID, context.tenant().getId().toString());
+        session.setAttribute(SESSION_OCCUPANCY_ID, context.occupancy().getId().toString());
+        session.setAttribute(SESSION_RESIDENT_ENTRY_ID, context.resident().getId().toString());
         session.setMaxInactiveInterval(12 * 60 * 60);
-        return toResponse(tenant, occupancy);
+        return toResponse(context.tenant(), context.occupancy(), context.resident());
     }
 
     public ResidentContext requireContext(HttpSession session) {
@@ -77,7 +89,8 @@ public class ResidentSessionService {
 
         UUID tenantId = parseUuid(session.getAttribute(SESSION_TENANT_ID));
         UUID occupancyId = parseUuid(session.getAttribute(SESSION_OCCUPANCY_ID));
-        if (tenantId == null || occupancyId == null) {
+        UUID residentEntryId = parseUuid(session.getAttribute(SESSION_RESIDENT_ENTRY_ID));
+        if (tenantId == null || occupancyId == null || residentEntryId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Faça login como morador para continuar.");
         }
 
@@ -87,28 +100,26 @@ public class ResidentSessionService {
 
         ApartmentOccupancy occupancy = occupancyRepository.findByTenantIdAndIdAndDeletedFalse(tenantId, occupancyId)
                 .filter(item -> item.getStatus() == ApartmentOccupancy.Status.ACTIVE)
-                .filter(item -> Boolean.TRUE.equals(item.getResidentAccessEnabled()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "A ocupação desta unidade não está mais ativa."));
+
+        RegistryEntry resident = registryEntryRepository.findByTenantIdAndIdAndDeletedFalse(tenantId, residentEntryId)
+                .filter(item -> item.getEntryType() == RegistryEntry.EntryType.RESIDENT)
+                .filter(item -> Boolean.TRUE.equals(item.getActive()))
+                .filter(item -> occupancyId.equals(item.getOccupancyId()))
                 .filter(item -> clean(item.getResidentUsername()) != null && clean(item.getResidentPasswordHash()) != null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "O acesso desta unidade não está mais ativo."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "O acesso deste morador não está mais ativo."));
 
-        List<RegistryEntry> residents = registryEntryRepository
-                .findAllByTenantIdAndOccupancyIdAndEntryTypeAndActiveTrueAndDeletedFalseOrderByNameAsc(
-                        tenantId, occupancyId, RegistryEntry.EntryType.RESIDENT);
-        RegistryEntry representative = residents.stream().findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                        "A ocupação não possui condômino ativo para registrar as solicitações da unidade."));
-
-        return new ResidentContext(tenant, occupancy, representative);
+        return new ResidentContext(tenant, occupancy, resident);
     }
 
     public ResidentSessionResponse current(HttpSession session) {
         ResidentContext context = requireContext(session);
-        return toResponse(context.tenant(), context.occupancy());
+        return toResponse(context.tenant(), context.occupancy(), context.resident());
     }
 
     public ResidentContext requirePortalContext(HttpSession session) {
         ResidentContext context = requireContext(session);
-        if (Boolean.TRUE.equals(context.occupancy().getResidentMustChangePassword())) {
+        if (Boolean.TRUE.equals(context.resident().getResidentMustChangePassword())) {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
                     "Altere a senha temporária antes de acessar os dados da unidade.");
         }
@@ -118,7 +129,7 @@ public class ResidentSessionService {
     @Transactional
     public ResidentSessionResponse updateCredentials(HttpSession session, ResidentCredentialsUpdateRequest request) {
         ResidentContext context = requireContext(session);
-        ApartmentOccupancy occupancy = context.occupancy();
+        RegistryEntry resident = context.resident();
 
         String username = clean(request.username());
         if (username != null) {
@@ -127,66 +138,70 @@ public class ResidentSessionService {
                         "O usuário deve ter entre 4 e 100 caracteres.");
             }
             username = username.toLowerCase(Locale.ROOT);
-            ApartmentOccupancy conflict = occupancyRepository
+            RegistryEntry conflict = registryEntryRepository
                     .findByTenantIdAndResidentUsernameIgnoreCaseAndDeletedFalse(context.tenant().getId(), username)
                     .orElse(null);
-            if (conflict != null && !conflict.getId().equals(occupancy.getId())) {
+            if (conflict != null && !conflict.getId().equals(resident.getId())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Este nome de usuário já está em uso no condomínio.");
+                        "Este nome de usuário já está em uso neste condomínio.");
             }
-            occupancy.setResidentUsername(username);
+            resident.setResidentUsername(username);
         }
 
         String password = request.newPassword();
         if (password != null && !password.isBlank()) {
-            if (password.length() < 8) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "A nova senha deve ter pelo menos 8 caracteres.");
-            }
-            occupancy.setResidentPasswordHash(passwordEncoder.encode(password));
-            occupancy.setResidentMustChangePassword(false);
-        } else if (Boolean.TRUE.equals(occupancy.getResidentMustChangePassword())) {
+            validatePassword(password);
+            resident.setResidentPasswordHash(passwordEncoder.encode(password));
+            resident.setResidentMustChangePassword(false);
+        } else if (Boolean.TRUE.equals(resident.getResidentMustChangePassword())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "No primeiro acesso é obrigatório definir uma nova senha.");
         }
 
-        occupancy.setUpdatedBy("morador:" + occupancy.getResidentUsername());
-        occupancyRepository.save(occupancy);
-        return toResponse(context.tenant(), occupancy);
+        resident.setUpdatedBy("morador:" + resident.getResidentUsername());
+        registryEntryRepository.save(resident);
+        return toResponse(context.tenant(), context.occupancy(), resident);
     }
 
     public void logout(HttpSession session) {
         if (session == null) return;
         session.removeAttribute(SESSION_TENANT_ID);
         session.removeAttribute(SESSION_OCCUPANCY_ID);
+        session.removeAttribute(SESSION_RESIDENT_ENTRY_ID);
     }
 
-    private ResidentSessionResponse toResponse(Tenant tenant, ApartmentOccupancy occupancy) {
+    private ResidentSessionResponse toResponse(Tenant tenant, ApartmentOccupancy occupancy, RegistryEntry resident) {
         return new ResidentSessionResponse(
                 occupancy.getId(),
+                resident.getId(),
+                resident.getName(),
                 tenant.getName(),
                 tenant.getSlug(),
                 occupancy.getBlock(),
                 occupancy.getApartment(),
-                occupancy.getResidentUsername(),
-                Boolean.TRUE.equals(occupancy.getResidentMustChangePassword())
+                resident.getResidentUsername(),
+                Boolean.TRUE.equals(resident.getResidentMustChangePassword())
         );
     }
 
+    private void validatePassword(String password) {
+        if (password.length() < 8
+                || password.chars().noneMatch(Character::isUpperCase)
+                || password.chars().noneMatch(Character::isLowerCase)
+                || password.chars().noneMatch(Character::isDigit)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A senha deve ter pelo menos 8 caracteres, com letra maiúscula, minúscula e número.");
+        }
+    }
+
     private ResponseStatusException invalidLogin() {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                "Usuário, senha, bloco, apartamento ou condomínio inválido.");
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos.");
     }
 
     private UUID parseUuid(Object value) {
         if (value == null) return null;
         try { return UUID.fromString(String.valueOf(value)); }
         catch (IllegalArgumentException ignored) { return null; }
-    }
-
-    private boolean same(String left, String right) {
-        String a = clean(left), b = clean(right);
-        return a != null && b != null && a.equalsIgnoreCase(b);
     }
 
     private String cleanRequired(String value) {

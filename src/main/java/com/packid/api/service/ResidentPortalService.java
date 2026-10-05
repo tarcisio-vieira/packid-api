@@ -143,7 +143,7 @@ public class ResidentPortalService {
         }
         if (p.getResidentAcknowledgedAt() == null) {
             p.setResidentAcknowledgedAt(LocalDateTime.now());
-            p.setUpdatedBy("morador-app:" + context.occupancy().getResidentUsername());
+            p.setUpdatedBy("morador-app:" + context.resident().getResidentUsername());
             packIdRepository.save(p);
         }
         return packResponse(p, block, apartment);
@@ -235,7 +235,7 @@ public class ResidentPortalService {
         entry.setEmail(email);
         entry.setProfession(clean(request.profession()));
         entry.setDocument(document);
-        String actor = "morador:" + context.occupancy().getResidentUsername();
+        String actor = "morador:" + context.resident().getResidentUsername();
         entry.setUpdatedBy(actor);
         if (entry.getPersonId() != null) {
             personRepository.findByTenantIdAndIdAndDeletedFalse(context.tenant().getId(), entry.getPersonId())
@@ -278,7 +278,7 @@ public class ResidentPortalService {
         entry.setPhotoMimeType(processed.mimeType());
         entry.setPhotoFileName(processed.fileName());
         entry.setPhotoOwnerEmail(officialEmail);
-        entry.setUpdatedBy("morador:" + context.occupancy().getResidentUsername());
+        entry.setUpdatedBy("morador:" + context.resident().getResidentUsername());
         RegistryEntry saved = registryEntryRepository.save(entry);
         if (oldFileId != null && !oldFileId.equals(uploaded.id())) {
             try { googleDrivePhotoService.deletePhoto(token, oldFileId); } catch (Exception ignored) { }
@@ -296,7 +296,7 @@ public class ResidentPortalService {
         if (entry.getEntryType() != RegistryEntry.EntryType.RESIDENT || !Boolean.TRUE.equals(entry.getActive())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente condôminos ativos podem enviar laudo médico.");
         }
-        String actor = "morador:" + context.occupancy().getResidentUsername();
+        String actor = "morador:" + context.resident().getResidentUsername();
         PoolCard card = poolCardService.ensurePendingCardForResident(context.tenant().getId(), entry, actor);
         PoolCard saved = poolCardDocumentService.uploadForResident(card, file, actor);
         return poolCardService.toResponse(saved);

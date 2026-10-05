@@ -1,0 +1,37 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0037-managed-documents
+      author: openai
+      changes:
+        - createTable:
+            tableName: managed_document
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: category, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: display_name, type: varchar(220), constraints: { nullable: false } }
+              - column: { name: original_file_name, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: mime_type, type: varchar(180) }
+              - column: { name: file_extension, type: varchar(24) }
+              - column: { name: file_size, type: bigint, constraints: { nullable: false } }
+              - column: { name: drive_file_id, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamp }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column: { name: created_by, type: varchar(150) }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: managed_document
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_managed_document_tenant
+        - createIndex:
+            tableName: managed_document
+            indexName: idx_managed_document_tenant_category
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: category }
+              - column: { name: deleted }

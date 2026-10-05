@@ -315,7 +315,7 @@ public class SpaceAccessService {
                 if (!assumeResponsibility) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, keyAlreadyWithUnitMessage(holder));
                 }
-                closeTransferredResponsibility(holder, occupancy.getBlock(), occupancy.getApartment(), occupancy.getResidentUsername());
+                closeTransferredResponsibility(holder, occupancy.getBlock(), occupancy.getApartment(), resident.getResidentUsername());
                 return toResponse(createTransferredRequest(context, spaceType, holder), tenantId);
             }
             return toResponse(createPickupRequest(context, spaceType), tenantId);
@@ -324,7 +324,7 @@ public class SpaceAccessService {
         if (current.getStatus() == SpaceAccessRequest.Status.IN_USE) {
             current.setStatus(SpaceAccessRequest.Status.REQUESTED_RETURN);
             current.setReturnRequestedAt(LocalDateTime.now());
-            current.setUpdatedBy(residentActor(occupancy.getResidentUsername()));
+            current.setUpdatedBy(residentActor(resident.getResidentUsername()));
             return toResponse(repository.save(current), tenantId);
         }
 
@@ -361,7 +361,7 @@ public class SpaceAccessService {
         var occupancy = context.occupancy();
         SpaceAccessRequest request = baseResidentRequest(context, spaceType);
         request.setStatus(SpaceAccessRequest.Status.REQUESTED_PICKUP);
-        request.setCreatedBy(residentActor(occupancy.getResidentUsername()));
+        request.setCreatedBy(residentActor(context.resident().getResidentUsername()));
         return repository.save(request);
     }
 
@@ -377,7 +377,7 @@ public class SpaceAccessService {
         request.setReleasedAt(now);
         request.setReleasedBy("transferência entre unidades");
         request.setNotes("Responsabilidade assumida da unidade " + unitLabel(previousHolder) + ".");
-        request.setCreatedBy(residentActor(occupancy.getResidentUsername()));
+        request.setCreatedBy(residentActor(context.resident().getResidentUsername()));
         return repository.save(request);
     }
 

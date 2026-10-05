@@ -72,7 +72,7 @@ public class ServiceRecordService {
         } else if (scope != null) {
             records = repository.findAllByTenantIdAndServiceScopeAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId(), scope);
         } else {
-            records = repository.findAllByTenantIdAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId());
+            records = repository.findAllByTenantIdAndServiceScopeAndDeletedFalseOrderByPerformedAtDesc(appUser.getTenantId(), ServiceRecord.ServiceScope.CONDOMINIUM);
         }
         return records.stream().map(item -> toResponse(item, item.getServiceProvider(), item.getServiceCompany())).toList();
     }

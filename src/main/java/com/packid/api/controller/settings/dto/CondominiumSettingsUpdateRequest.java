@@ -25,6 +25,8 @@ public record CondominiumSettingsUpdateRequest(
         Boolean emailNotificationsEnabled,
         Boolean residentCredentialEmailsEnabled,
         Boolean packIdPrintTwoLabels,
+        Boolean showServiceProviderPhoto,
+        Boolean showDeliveryPersonPhoto,
 
         @Size(max = 80) String poolCardTitle,
         @Size(max = 120) String poolCardSubtitle,

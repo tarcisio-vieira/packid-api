@@ -72,6 +72,12 @@ public class Condominium extends AuditableEntity {
     @Column(name = "packid_print_two_labels", nullable = false)
     private Boolean packIdPrintTwoLabels = Boolean.TRUE;
 
+    @Column(name = "show_service_provider_photo", nullable = false)
+    private Boolean showServiceProviderPhoto = Boolean.TRUE;
+
+    @Column(name = "show_delivery_person_photo", nullable = false)
+    private Boolean showDeliveryPersonPhoto = Boolean.TRUE;
+
     @Column(name = "logo_drive_file_id", length = 255)
     private String logoDriveFileId;
 

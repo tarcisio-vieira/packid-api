@@ -1,0 +1,81 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0035-resident-person-login
+      author: openai
+      changes:
+        - addColumn:
+            tableName: registry_entry
+            columns:
+              - column:
+                  name: resident_must_change_password
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: resident_credential_email_enabled
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: registry_entry
+            indexName: idx_registry_entry_global_resident_login
+            columns:
+              - column:
+                  name: resident_username
+              - column:
+                  name: entry_type
+              - column:
+                  name: active
+              - column:
+                  name: deleted
+        - sql:
+            splitStatements: false
+            sql: |
+              -- Compatibilidade com as credenciais compartilhadas por unidade existentes.
+              -- Para cada ocupação com acesso ativo, migra a credencial para um único condômino:
+              -- proprietário primeiro; na ausência, o cadastro mais antigo da ocupação.
+              WITH ranked AS (
+                  SELECT re.id,
+                         re.occupancy_id,
+                         row_number() OVER (
+                             PARTITION BY re.occupancy_id
+                             ORDER BY coalesce(re.unit_owner, false) DESC,
+                                      re.created_at ASC,
+                                      re.id ASC
+                         ) AS rn
+                    FROM registry_entry re
+                   WHERE re.entry_type = 'RESIDENT'
+                     AND re.active = true
+                     AND re.deleted = false
+                     AND re.occupancy_id IS NOT NULL
+              )
+              UPDATE registry_entry re
+                 SET resident_username = ao.resident_username,
+                     resident_password_hash = ao.resident_password_hash,
+                     resident_must_change_password = ao.resident_must_change_password,
+                     resident_credential_email_enabled = ao.credential_email_enabled
+                FROM ranked r
+                JOIN apartment_occupancy ao ON ao.id = r.occupancy_id
+               WHERE re.id = r.id
+                 AND r.rn = 1
+                 AND ao.resident_access_enabled = true
+                 AND ao.deleted = false
+                 AND ao.status = 'ACTIVE'
+                 AND ao.resident_username IS NOT NULL
+                 AND ao.resident_password_hash IS NOT NULL
+                 AND (re.resident_username IS NULL OR re.resident_password_hash IS NULL);
+
+        - sql:
+            sql: |
+              -- O modelo antigo de credencial compartilhada por unidade deixa de ser usado.
+              UPDATE apartment_occupancy
+                 SET resident_access_enabled = false,
+                     resident_username = NULL,
+                     resident_password_hash = NULL,
+                     resident_must_change_password = true,
+                     credential_email_enabled = false
+               WHERE resident_access_enabled = true
+                  OR resident_username IS NOT NULL
+                  OR resident_password_hash IS NOT NULL;

@@ -4,6 +4,7 @@ import com.packid.api.controller.settings.dto.CondominiumSettingsResponse;
 import com.packid.api.controller.settings.dto.CondominiumSettingsUpdateRequest;
 import com.packid.api.controller.settings.dto.GoogleAccountSettingsResponse;
 import com.packid.api.controller.settings.dto.PackIdLabelPrintSettingsResponse;
+import com.packid.api.controller.settings.dto.RegistryPhotoSettingsResponse;
 import com.packid.api.domain.model.AppUser;
 import com.packid.api.domain.model.Condominium;
 import com.packid.api.domain.model.Tenant;
@@ -82,6 +83,8 @@ public class CondominiumSettingsService {
         condominium.setEmailNotificationsEnabled(!Boolean.FALSE.equals(request.emailNotificationsEnabled()));
         condominium.setResidentCredentialEmailsEnabled(Boolean.TRUE.equals(request.residentCredentialEmailsEnabled()));
         condominium.setPackIdPrintTwoLabels(!Boolean.FALSE.equals(request.packIdPrintTwoLabels()));
+        condominium.setShowServiceProviderPhoto(!Boolean.FALSE.equals(request.showServiceProviderPhoto()));
+        condominium.setShowDeliveryPersonPhoto(!Boolean.FALSE.equals(request.showDeliveryPersonPhoto()));
         condominium.setPoolCardTitle(defaultText(request.poolCardTitle(), "PISCINA"));
         condominium.setPoolCardSubtitle(defaultText(request.poolCardSubtitle(), "USO DA PISCINA"));
         condominium.setPoolOpeningHours(clean(request.poolOpeningHours()));
@@ -118,6 +121,15 @@ public class CondominiumSettingsService {
         Condominium condominium = firstCondominium(appUser);
         boolean printTwoLabels = condominium == null || !Boolean.FALSE.equals(condominium.getPackIdPrintTwoLabels());
         return new PackIdLabelPrintSettingsResponse(printTwoLabels ? 2 : 1);
+    }
+
+    public RegistryPhotoSettingsResponse registryPhotoSettings(OidcUser oidcUser) {
+        AppUser appUser = authenticatedUserService.requireAppUser(oidcUser);
+        Condominium condominium = firstCondominium(appUser);
+        return new RegistryPhotoSettingsResponse(
+                condominium == null || !Boolean.FALSE.equals(condominium.getShowServiceProviderPhoto()),
+                condominium == null || !Boolean.FALSE.equals(condominium.getShowDeliveryPersonPhoto())
+        );
     }
 
     private Tenant requireTenant(AppUser appUser) {
@@ -161,6 +173,8 @@ public class CondominiumSettingsService {
                 c == null || !Boolean.FALSE.equals(c.getEmailNotificationsEnabled()),
                 c != null && Boolean.TRUE.equals(c.getResidentCredentialEmailsEnabled()),
                 c == null || !Boolean.FALSE.equals(c.getPackIdPrintTwoLabels()),
+                c == null || !Boolean.FALSE.equals(c.getShowServiceProviderPhoto()),
+                c == null || !Boolean.FALSE.equals(c.getShowDeliveryPersonPhoto()),
                 c != null && clean(c.getLogoDriveFileId()) != null,
                 c == null ? null : c.getLogoFileName(),
                 c == null ? "PISCINA" : defaultText(c.getPoolCardTitle(), "PISCINA"),

@@ -18,8 +18,8 @@ spring:
       connection-init-sql: "SET TIME ZONE 'America/Sao_Paulo'"
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 30MB
+      max-request-size: 35MB
   security:
     oauth2:
       client:

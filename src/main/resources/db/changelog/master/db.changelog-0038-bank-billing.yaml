@@ -1,0 +1,95 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0038-01-bank-integration-config
+      author: openai
+      changes:
+        - createTable:
+            tableName: bank_integration_config
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: provider, type: varchar(40), defaultValue: NONE, constraints: { nullable: false } }
+              - column: { name: environment, type: varchar(20), defaultValue: SANDBOX, constraints: { nullable: false } }
+              - column: { name: enabled, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: client_id, type: varchar(255) }
+              - column: { name: client_secret_encrypted, type: text }
+              - column: { name: api_base_url, type: varchar(500) }
+              - column: { name: token_url, type: varchar(500) }
+              - column: { name: workspace_id, type: varchar(150) }
+              - column: { name: covenant_code, type: varchar(100) }
+              - column: { name: beneficiary_code, type: varchar(100) }
+              - column: { name: notes, type: text }
+              - column: { name: last_sync_at, type: timestamp }
+              - column: { name: last_error, type: text }
+              - column: { name: created_at, type: timestamp }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column: { name: created_by, type: varchar(150) }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: bank_integration_config
+            columnNames: tenant_id
+            constraintName: uk_bank_integration_tenant
+        - addForeignKeyConstraint:
+            baseTableName: bank_integration_config
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_bank_integration_tenant
+
+  - changeSet:
+      id: 0038-02-billing-charge
+      author: openai
+      changes:
+        - createTable:
+            tableName: billing_charge
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: occupancy_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: bank_provider, type: varchar(40) }
+              - column: { name: external_id, type: varchar(180) }
+              - column: { name: reference_number, type: varchar(120) }
+              - column: { name: description, type: varchar(255) }
+              - column: { name: nominal_value, type: "numeric(14,2)", constraints: { nullable: false } }
+              - column: { name: issue_date, type: date }
+              - column: { name: due_date, type: date, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(30), defaultValue: PENDING, constraints: { nullable: false } }
+              - column: { name: digitable_line, type: varchar(160) }
+              - column: { name: barcode, type: varchar(160) }
+              - column: { name: document_url, type: varchar(1000) }
+              - column: { name: bank_payload_reference, type: varchar(255) }
+              - column: { name: last_bank_update_at, type: timestamp }
+              - column: { name: created_at, type: timestamp }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column: { name: created_by, type: varchar(150) }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: billing_charge
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_billing_charge_tenant
+        - addForeignKeyConstraint:
+            baseTableName: billing_charge
+            baseColumnNames: occupancy_id
+            referencedTableName: apartment_occupancy
+            referencedColumnNames: id
+            constraintName: fk_billing_charge_occupancy
+        - createIndex:
+            tableName: billing_charge
+            indexName: idx_billing_charge_tenant_due
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: due_date }
+        - createIndex:
+            tableName: billing_charge
+            indexName: idx_billing_charge_occupancy_due
+            columns:
+              - column: { name: occupancy_id }
+              - column: { name: due_date }

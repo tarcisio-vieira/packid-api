@@ -1,0 +1,167 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0034-amenity-reservations
+      author: openai
+      changes:
+        - createTable:
+            tableName: amenity_space
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(120), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: usage_fee, type: "numeric(12,2)", defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: min_advance_days, type: integer, defaultValueNumeric: 7, constraints: { nullable: false } }
+              - column: { name: max_advance_days, type: integer, defaultValueNumeric: 365, constraints: { nullable: false } }
+              - column: { name: cancellation_days, type: integer, defaultValueNumeric: 7, constraints: { nullable: false } }
+              - column: { name: active, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: photo_data, type: bytea }
+              - column: { name: photo_mime_type, type: varchar(120) }
+              - column: { name: photo_file_name, type: varchar(255) }
+              - column: { name: created_at, type: timestamp, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column: { name: created_by, type: varchar(150), constraints: { nullable: false } }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: amenity_space
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_amenity_space_tenant
+            onDelete: RESTRICT
+        - addUniqueConstraint:
+            tableName: amenity_space
+            columnNames: tenant_id,name
+            constraintName: uq_amenity_space_tenant_name
+        - createIndex:
+            tableName: amenity_space
+            indexName: idx_amenity_space_tenant_active
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: active }
+
+        - createTable:
+            tableName: amenity_reservation
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: amenity_space_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: occupancy_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: resident_registry_entry_id, type: uuid }
+              - column: { name: block, type: varchar(30), constraints: { nullable: false } }
+              - column: { name: apartment, type: varchar(30), constraints: { nullable: false } }
+              - column: { name: reservation_date, type: date, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(30), defaultValue: BOOKED, constraints: { nullable: false } }
+              - column: { name: usage_fee_snapshot, type: "numeric(12,2)", defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: requested_at, type: timestamp, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: cancelled_at, type: timestamp }
+              - column: { name: cancelled_by, type: varchar(150) }
+              - column: { name: notes, type: text }
+              - column: { name: created_at, type: timestamp, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamp }
+              - column: { name: deleted_at, type: timestamp }
+              - column: { name: created_by, type: varchar(150), constraints: { nullable: false } }
+              - column: { name: updated_by, type: varchar(150) }
+              - column: { name: deleted_by, type: varchar(150) }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_tenant
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation
+            baseColumnNames: amenity_space_id
+            referencedTableName: amenity_space
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_space
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation
+            baseColumnNames: occupancy_id
+            referencedTableName: apartment_occupancy
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_occupancy
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation
+            baseColumnNames: resident_registry_entry_id
+            referencedTableName: registry_entry
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_resident
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: amenity_reservation
+            indexName: idx_amenity_reservation_tenant_date
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: reservation_date }
+              - column: { name: status }
+        - createIndex:
+            tableName: amenity_reservation
+            indexName: idx_amenity_reservation_space_date
+            columns:
+              - column: { name: amenity_space_id }
+              - column: { name: reservation_date }
+              - column: { name: status }
+
+        - createTable:
+            tableName: amenity_reservation_guest
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: tenant_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: reservation_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(160), constraints: { nullable: false } }
+              - column: { name: document, type: varchar(80) }
+              - column: { name: created_at, type: timestamp, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: created_by, type: varchar(150), constraints: { nullable: false } }
+              - column: { name: deleted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation_guest
+            baseColumnNames: tenant_id
+            referencedTableName: tenant
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_guest_tenant
+            onDelete: RESTRICT
+        - addForeignKeyConstraint:
+            baseTableName: amenity_reservation_guest
+            baseColumnNames: reservation_id
+            referencedTableName: amenity_reservation
+            referencedColumnNames: id
+            constraintName: fk_amenity_reservation_guest_reservation
+            onDelete: CASCADE
+        - createIndex:
+            tableName: amenity_reservation_guest
+            indexName: idx_amenity_reservation_guest_reservation
+            columns:
+              - column: { name: reservation_id }
+
+  - changeSet:
+      id: 0034-seed-amenity-spaces
+      author: openai
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              INSERT INTO amenity_space
+                (id, tenant_id, name, description, usage_fee, min_advance_days, max_advance_days,
+                 cancellation_days, active, created_at, created_by, deleted)
+              SELECT md5(t.id::text || ':' || seed.code)::uuid, t.id, seed.name, seed.description,
+                     0, 7, 365, 7, true, CURRENT_TIMESTAMP, 'liquibase', false
+                FROM tenant t
+                CROSS JOIN (VALUES
+                  ('PARTY_HALL', 'Salão de festas', 'Espaço para festas e confraternizações.'),
+                  ('GOURMET_SPACE', 'Espaço Gourmet', 'Espaço gourmet para eventos e confraternizações.'),
+                  ('BBQ_1', 'Churrasqueira 1', 'Churrasqueira 1.'),
+                  ('BBQ_2', 'Churrasqueira 2', 'Churrasqueira 2.')
+                ) AS seed(code, name, description)
+               WHERE t.deleted = false
+                 AND NOT EXISTS (
+                   SELECT 1 FROM amenity_space s
+                    WHERE s.tenant_id = t.id AND lower(s.name) = lower(seed.name) AND s.deleted = false
+                 );

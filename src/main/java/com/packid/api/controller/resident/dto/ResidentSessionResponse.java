@@ -4,6 +4,8 @@ import java.util.UUID;
 
 public record ResidentSessionResponse(
         UUID occupancyId,
+        UUID residentEntryId,
+        String residentName,
         String tenantName,
         String tenantSlug,
         String block,

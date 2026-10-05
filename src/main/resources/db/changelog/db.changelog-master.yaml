@@ -75,3 +75,21 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/master/db.changelog-0033-service-record-lifecycle.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0034-amenity-reservations.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0035-resident-person-login.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0036-announcements.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0037-managed-documents.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0038-bank-billing.yaml
+
+  - include:
+      file: db/changelog/master/db.changelog-0039-registry-photo-visibility.yaml

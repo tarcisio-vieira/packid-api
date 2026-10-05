@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0039-registry-photo-visibility
+      author: openai
+      changes:
+        - addColumn:
+            tableName: condominium
+            columns:
+              - column:
+                  name: show_service_provider_photo
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: show_delivery_person_photo
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

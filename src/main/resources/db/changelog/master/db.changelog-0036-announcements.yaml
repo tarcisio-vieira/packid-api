@@ -1,0 +1,105 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0036-announcements
+      author: openai
+      changes:
+        - createTable:
+            tableName: announcement
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_announcement_tenant
+                    references: tenant(id)
+              - column:
+                  name: title
+                  type: varchar(180)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body_html
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body_text
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: published_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: recipient_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: delivered_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: failed_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: delivery_status
+                  type: varchar(20)
+                  defaultValue: PENDING
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+              - column:
+                  name: updated_at
+                  type: timestamp
+              - column:
+                  name: deleted_at
+                  type: timestamp
+              - column:
+                  name: created_by
+                  type: varchar(150)
+              - column:
+                  name: updated_by
+                  type: varchar(150)
+              - column:
+                  name: deleted_by
+                  type: varchar(150)
+              - column:
+                  name: deleted
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: announcement
+            indexName: idx_announcement_tenant_published
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: published_at
+        - createIndex:
+            tableName: announcement
+            indexName: idx_announcement_tenant_deleted
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: deleted

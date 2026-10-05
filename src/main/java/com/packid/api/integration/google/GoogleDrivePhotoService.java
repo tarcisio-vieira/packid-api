@@ -118,6 +118,64 @@ public class GoogleDrivePhotoService {
         }
     }
 
+
+    public DriveFile uploadTenantDocument(
+            String accessToken,
+            UUID tenantId,
+            UUID documentId,
+            String categoryFolderName,
+            String originalFilename,
+            String mimeType,
+            byte[] bytes
+    ) {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token do Google Drive não disponível.");
+        }
+        String rootFolderId = findOrCreateFolder(accessToken, null, ROOT_FOLDER_NAME, "vsgiFolder", "condominium");
+        String tenantFolderId = findOrCreateFolder(accessToken, rootFolderId, "Tenant " + tenantId, "vsgiDocumentTenant", tenantId.toString());
+        String categoryKey = categoryFolderName == null ? "documents" : categoryFolderName.trim().toLowerCase().replaceAll("[^a-z0-9]+", "-");
+        String folderId = findOrCreateFolder(accessToken, tenantFolderId, categoryFolderName, "vsgiDocumentSection", categoryKey);
+        String fileName = documentId + "-" + safeDocumentName(originalFilename);
+        Map<String, Object> metadata = Map.of(
+                "name", fileName,
+                "parents", List.of(folderId),
+                "appProperties", Map.of(
+                        "packidTenantId", tenantId.toString(),
+                        "packidDocumentId", documentId.toString(),
+                        "packidDocumentCategory", categoryKey
+                )
+        );
+        try {
+            String boundary = "packid-document-" + UUID.randomUUID();
+            byte[] body = multipartRelatedBody(boundary, metadata, mimeType, bytes);
+            DriveFile created = restClient.post()
+                    .uri(uriBuilder -> uriBuilder.path("/upload/drive/v3/files")
+                            .queryParam("uploadType", "multipart")
+                            .queryParam("fields", "id,name,mimeType,size")
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .contentType(MediaType.parseMediaType("multipart/related; boundary=" + boundary))
+                    .body(body)
+                    .retrieve()
+                    .body(DriveFile.class);
+            if (created == null || created.id() == null || created.id().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "O Google Drive não retornou o identificador do documento.");
+            }
+            return created;
+        } catch (RestClientResponseException ex) {
+            throw driveException("Não foi possível enviar o documento para o Google Drive.", ex);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível preparar o documento para envio ao Google Drive.", ex);
+        }
+    }
+
+    private String safeDocumentName(String value) {
+        String name = value == null ? "arquivo" : value.trim();
+        if (name.isBlank()) name = "arquivo";
+        name = name.replaceAll("[\\/:*?\"<>|\r\n]+", "-");
+        return name.length() > 180 ? name.substring(name.length() - 180) : name;
+    }
+
     public PhotoContent downloadPhoto(
             OAuth2AuthorizedClient authorizedClient,
             String driveFileId,
@@ -125,6 +183,7 @@ public class GoogleDrivePhotoService {
     ) {
         return downloadPhoto(accessToken(authorizedClient), driveFileId, fallbackMimeType);
     }
+
 
     public PhotoContent downloadPhoto(
             String accessToken,

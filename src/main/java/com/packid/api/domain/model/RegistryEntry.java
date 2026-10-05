@@ -126,6 +126,12 @@ public class RegistryEntry extends AuditableEntity {
     @Column(name = "resident_password_hash", length = 255)
     private String residentPasswordHash;
 
+    @Column(name = "resident_must_change_password", nullable = false)
+    private Boolean residentMustChangePassword = Boolean.TRUE;
+
+    @Column(name = "resident_credential_email_enabled", nullable = false)
+    private Boolean residentCredentialEmailEnabled = Boolean.FALSE;
+
     // A imagem não é armazenada no banco. Estes campos guardam apenas a referência
     // do arquivo privado criado no Google Drive da conta que fez o upload.
     @Column(name = "photo_drive_file_id", length = 255)

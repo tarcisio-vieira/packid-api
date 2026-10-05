@@ -21,6 +21,8 @@ public record CondominiumSettingsResponse(
         boolean emailNotificationsEnabled,
         boolean residentCredentialEmailsEnabled,
         boolean packIdPrintTwoLabels,
+        boolean showServiceProviderPhoto,
+        boolean showDeliveryPersonPhoto,
         boolean logoAvailable,
         String logoFileName,
         String poolCardTitle,
